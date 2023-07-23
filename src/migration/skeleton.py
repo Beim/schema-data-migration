@@ -26,8 +26,8 @@ import sys
 
 from migration import __version__
 
-__author__ = "xingkun.liu"
-__copyright__ = "xingkun.liu"
+__author__ = "beim"
+__copyright__ = "beim"
 __license__ = "MIT"
 
 _logger = logging.getLogger(__name__)

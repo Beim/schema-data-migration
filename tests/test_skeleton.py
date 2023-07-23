@@ -2,8 +2,8 @@ import pytest
 
 from migration.skeleton import fib, main
 
-__author__ = "xingkun.liu"
-__copyright__ = "xingkun.liu"
+__author__ = "beim"
+__copyright__ = "beim"
 __license__ = "MIT"
 
 

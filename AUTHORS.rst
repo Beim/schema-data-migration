@@ -2,4 +2,4 @@
 Contributors
 ============
 
-* xingkun.liu <xingkunliu@qq.com>
+* beim <beim2015@outlook.com>
