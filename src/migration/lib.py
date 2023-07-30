@@ -555,7 +555,7 @@ class CLI:
                 cli_env.TABLE_MIGRATION_HISTORY,
             ]
         )
-        os.symlink(
+        os.link(
             os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, ".skeema"),
             os.path.join(cli_env.MIGRATION_CWD, cli_env.ENV_INI_FILE),
         )

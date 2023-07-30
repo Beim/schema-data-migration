@@ -22,3 +22,4 @@ Version 0.1.0
 - Added support for online schema migration
 - Enhanced `info` command to display unmigrated migration plans
 - Added `pull` command
+- Fix: access env.ini file from docker container
