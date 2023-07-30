@@ -67,6 +67,9 @@ sdm info environment
 # available values: HEAD, <version>, <version>_<name>, <environment>
 sdm diff [-v] left right
 
+# Updates the files under schema directory to match the database or an exiting migration plan
+sdm pull env_or_version
+
 # Fix stuck migration
 sdm fix [--fake] [-o OPERATOR] {migrate,rollback} environment
 
@@ -653,9 +656,12 @@ The skchema-data-migration tool creates two tables in the database by default: `
 
 You can change the default database name by setting environment variable: `TABLE_MIGRATION_HISTORY` and `TABLE_MIGRATION_HISTORY`.
 
+## Online schema change
+
+- https://www.skeema.io/docs/options/#alter-wrapper
+- https://docs.percona.com/percona-toolkit/pt-online-schema-change.html
+
 ## Future plans
 
-- [ ] Pre-condition check for data migration
-- [ ] Pre-compile for schema migration
-- [ ] Add support for online data migration.
-- [ ] Better error handling
+- [ ] Support conditional/repeatable execution of schema and data migration
+- [ ] Support database/table sharding

@@ -33,6 +33,13 @@ def add_mysql_args(parser: argparse.ArgumentParser):
     )
 
 
+def parse_pull_args(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        "env_or_version",
+        help="available values: <version>, <version>_<name>, <environment>",
+    )
+
+
 def parse_check_args(parser: argparse.ArgumentParser):
     subparsers = parser.add_subparsers(
         title="subcommand", dest="subcommand", required=True
@@ -271,14 +278,12 @@ class Command(StrEnum):
     ALIAS_MAKE_DATA = "md"
 
     INFO = "info"
-    # TODO - show the unapplied migration plans
 
     DIFF = "diff"
 
     FIX = "fix"
 
-    # TODO export schema
-    EXPORT_SCHEMA = "export-schema"
+    PULL = "pull"
 
     CHECK = "check"
     CHECK_INTEGRITY = "integrity"
@@ -365,6 +370,12 @@ def parse_args(args):
     )
     parse_check_args(parser_check)
 
+    # pull
+    parser_pull = subparsers.add_parser(
+        Command.PULL, help="pull schema from remote or migration plan"
+    )
+    parse_pull_args(parser_pull)
+
     return parent_parser.parse_args(args)
 
 
@@ -397,6 +408,8 @@ def main(raw_args):
             cli.info()
         case Command.DIFF:
             cli.diff()
+        case Command.PULL:
+            cli.pull()
         case Command.CHECK:
             match args.subcommand:
                 case Command.CHECK_INTEGRITY:

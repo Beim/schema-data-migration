@@ -416,6 +416,16 @@ def test_migrate(sort_plan_by_version):
         hists = dao.get_all()
         assert len(hists) == 1
 
+    # show migration history
+    args = make_args(
+        {
+            "environment": "dev",
+        }
+    )
+    cli = CLI(args=args)
+    info = cli.info()
+    assert len(info) == 4  # it should contain unapplied migration plans
+
     # migrate dev environment
     # it should bring the new table back
     args = make_args(

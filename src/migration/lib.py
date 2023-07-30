@@ -65,6 +65,19 @@ def build_session_from_env(env: str, echo: bool = False) -> Session:
     )
 
 
+def files_under_dir(dir_path: str, ends_with: str) -> Dict[str, str]:
+    """
+    return a map of file name to file path
+    """
+    res: Dict[str, str] = {}
+    for root, _, files in os.walk(dir_path):
+        for file in files:
+            if not file.endswith(ends_with):
+                continue
+            res[file] = os.path.join(root, file)
+    return res
+
+
 class Migrator:
     def forward(self, migration_plan: mp.MigrationPlan, args: Namespace):
         raise NotImplementedError
@@ -720,9 +733,10 @@ class CLI:
         return call_skeema(raw_args, cwd)
 
     def info(self) -> List[str]:
-        dao = self.build_dao()
-        hist_list = dao.get_all()
         self.read_migration_plans()
+        dao = self.build_dao()
+        with dao.session.begin():
+            hist_list = self._get_and_check_migration_histories()
 
         output = [
             [
@@ -737,6 +751,22 @@ class CLI:
             ]
             for h in hist_list
         ]
+
+        unapplied_plans = self.mpm.must_get_plan_between(len(hist_list), None)
+        output.extend(
+            [
+                [
+                    p.version,
+                    p.name,
+                    str(p.type),
+                    "NOT APPLIED",
+                    "",
+                    "",
+                ]
+                for p in unapplied_plans
+            ]
+        )
+
         logger.info(
             "migration history:\n"
             + tabulate(
@@ -745,7 +775,43 @@ class CLI:
                 tablefmt="orgtbl",
             )
         )
+
         return output
+
+    def pull(self):
+        env_or_version = self.args.env_or_version
+        self.read_migration_plans()
+        argtype = self._get_diff_type(env_or_version)
+        if argtype == mp.DiffItemType.ENVIRONMENT:
+            self.skeema(["pull", env_or_version])
+            return
+        if argtype == mp.DiffItemType.VERSION:
+            schema_dir_path = os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR)
+            schema_dir_files = files_under_dir(schema_dir_path, ".sql")
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                self.dump_schema(env_or_version, argtype, temp_dir, mkdir=False)
+                ver_files = files_under_dir(temp_dir, ".sql")
+
+                # move file under temp_dir to schema dir
+                for filename, filepath in ver_files.items():
+                    shutil.move(
+                        filepath,
+                        os.path.join(schema_dir_path, filename),
+                    )
+                    logger.info("Updated %s", os.path.join(schema_dir_path, filename))
+
+                # delete files in schema dir that are not in temp_dir
+                to_delete_files = set(schema_dir_files.keys()) - set(ver_files.keys())
+                for filename in to_delete_files:
+                    os.remove(schema_dir_files[filename])
+                    logger.info("Deleted %s", schema_dir_files[filename])
+
+        else:
+            raise Exception(
+                f"invalid argument type, {env_or_version} is neither environment nor"
+                " version"
+            )
 
     def diff(self):
         left = self.args.left
@@ -784,9 +850,14 @@ class CLI:
                 raise Exception(f"difference found between {left} and {right}")
 
     def dump_schema(
-        self, diff_arg: str, diff_type: mp.DiffItemType, dump_dir_path: str
+        self,
+        diff_arg: str,
+        diff_type: mp.DiffItemType,
+        dump_dir_path: str,
+        mkdir: bool = True,
     ):
-        os.makedirs(dump_dir_path, exist_ok=False)
+        if mkdir:
+            os.makedirs(dump_dir_path, exist_ok=False)
 
         if diff_type == mp.DiffItemType.HEAD:
             original_path = os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR)
