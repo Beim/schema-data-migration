@@ -26,7 +26,7 @@ You can also use docker image:
 docker run -u $(id -u):$(id -g) \
     -v $(pwd):/workspace \
     -e MYSQL_PWD="your_password" \
-    -it --rm beim/schema-data-migration:0.0.1 \
+    -it --rm beim/schema-data-migration:latest \
     sdm -h
 ```
 
