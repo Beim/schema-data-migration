@@ -146,7 +146,12 @@ def parse_make_schema_migration_args(parser: argparse.ArgumentParser):
 def parse_fix_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "subcommand",
-        choices=[Command.MIGRATE, Command.ROLLBACK],
+        choices=[
+            Command.MIGRATE,
+            Command.ALIAS_MIGRATE,
+            Command.ROLLBACK,
+            Command.ALIAS_ROLLBACK,
+        ],
         help="subcommand",
     )
     parser.add_argument(
@@ -419,9 +424,9 @@ def main(raw_args):
             cli.rollback()
         case Command.FIX:
             match args.subcommand:
-                case Command.MIGRATE:
+                case Command.MIGRATE | Command.ALIAS_MIGRATE:
                     cli.fix_migrate()
-                case Command.ROLLBACK:
+                case Command.ROLLBACK | Command.ALIAS_ROLLBACK:
                     cli.fix_rollback()
         case Command.MAKE_SCHEMA | Command.ALIAS_MAKE_SCHEMA:
             cli.make_schema_migration()
