@@ -33,6 +33,25 @@ def add_mysql_args(parser: argparse.ArgumentParser):
     )
 
 
+def parse_clean_args(parser: argparse.ArgumentParser):
+    subparsers = parser.add_subparsers(
+        title="subcommand", dest="subcommand", required=True
+    )
+    parse_schema_store = subparsers.add_parser(
+        Command.CLEAN_SCHEMA_STORE, help="clean unexpected files in schema store"
+    )
+    parse_schema_store.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="dry run mode, only show the files to be deleted",
+    )
+    parse_schema_store.add_argument(
+        "--skip-integrity",
+        action="store_true",
+        help="skip integrity check before clean",
+    )
+
+
 def parse_pull_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "env_or_version",
@@ -51,15 +70,13 @@ def parse_check_args(parser: argparse.ArgumentParser):
     parser_integrity.add_argument(
         "--fast",
         action="store_true",
-        help="fast check",
+        help="only checks existence instead of SHA1 of sql files",
     )
     parser_integrity.add_argument(
         "--debug",
         action="store_true",
         help="debug mode",
     )
-
-    pass
 
 
 def parse_diff_args(parser: argparse.ArgumentParser):
@@ -288,6 +305,9 @@ class Command(StrEnum):
     CHECK = "check"
     CHECK_INTEGRITY = "integrity"
 
+    CLEAN = "clean"
+    CLEAN_SCHEMA_STORE = "store"
+
 
 def parse_args(args):
     parent_parser = argparse.ArgumentParser(
@@ -376,6 +396,9 @@ def parse_args(args):
     )
     parse_pull_args(parser_pull)
 
+    parser_clean = subparsers.add_parser(Command.CLEAN, help="clean schema store")
+    parse_clean_args(parser_clean)
+
     return parent_parser.parse_args(args)
 
 
@@ -414,11 +437,21 @@ def main(raw_args):
             match args.subcommand:
                 case Command.CHECK_INTEGRITY:
                     cli.check_integrity()
+        case Command.CLEAN:
+            match args.subcommand:
+                case Command.CLEAN_SCHEMA_STORE:
+                    unexpected_files = cli.clean_schema_store()
+                    if len(unexpected_files) > 0 and args.dry_run:
+                        raise Exception(
+                            "Found %d unexpected files in schema store"
+                            % len(unexpected_files)
+                        )
 
 
 def run():
     try:
         main(sys.argv[1:])
+        logger.info("Done")
     except Exception as e:
         if log_env.LOG_LEVEL == log_env.LEVEL_DEBUG:
             raise e

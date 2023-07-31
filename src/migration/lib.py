@@ -953,6 +953,15 @@ class CLI:
         else:
             return mp.DiffItemType.ENVIRONMENT
 
+    # TODO refactor to use this method
+    def _schema_store_file_full_path(self, sha1: str) -> str:
+        return os.path.join(
+            cli_env.MIGRATION_CWD,
+            cli_env.SCHEMA_STORE_DIR,
+            sha1[:2],
+            sha1[2:],
+        )
+
     def read_schema_index(
         self, sha1: str, check_sha: bool = False
     ) -> List[Tuple[str, str]]:
@@ -983,6 +992,64 @@ class CLI:
                 ),  # sql_filepath
                 os.path.join(temp_dir, sql_filename),
             )
+
+    def clean_schema_store(self) -> List[str]:
+        dry_run = self.args.dry_run if "dry_run" in self.args else False
+        skip_integrity = (
+            self.args.skip_integrity if "skip_integrity" in self.args else False
+        )
+        self.read_migration_plans()
+        if not skip_integrity:
+            self._check_integrity()
+        return self._clean_schema_store(delete_unexpected=dry_run)
+
+    def _clean_schema_store(self, delete_unexpected: bool) -> List[str]:
+        schema_store_path = os.path.join(
+            cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR
+        )
+
+        # get all valid paths in schema store
+        schema_plans = self.mpm.get_plans_by_type(mp.Type.SCHEMA)
+        valid_index_sha1s = set()
+        valid_sql_sha1s = set()
+        for plan in schema_plans:
+            if plan.change.forward is not None:
+                valid_index_sha1s.add(plan.change.forward.id)
+            if plan.change.backward is not None:
+                valid_index_sha1s.add(plan.change.backward.id)
+        for index_sha1 in valid_index_sha1s:
+            for sql_sha1, _ in self.read_schema_index(index_sha1):
+                valid_sql_sha1s.add(sql_sha1)
+        valid_paths = set()
+        for sha1 in valid_index_sha1s.union(valid_sql_sha1s):
+            valid_paths.add(
+                os.path.join(
+                    sha1[:2],
+                    sha1[2:],
+                )
+            )
+
+        # get all paths in schema store
+        all_paths = set()
+        for root, dirs, files in os.walk(schema_store_path):
+            for file in files:
+                if not file.endswith(".gitkeep"):
+                    all_paths.add(
+                        os.path.join(root, file).removeprefix(schema_store_path + "/")
+                    )
+
+        # log the unexpected paths
+        # if not dry run delete those files
+        unexpected_paths = all_paths - valid_paths
+        for p in unexpected_paths:
+            full_path = os.path.join(schema_store_path, p)
+            if delete_unexpected:
+                logger.warning("Unexpected file: %s", full_path)
+            else:
+                os.remove(full_path)
+                logger.warning("Deleted %s", full_path)
+
+        return list(unexpected_paths)
 
     # This method performs a basic check on the integrity of the migration plans.
     # It reads the migration plans and checks that:
@@ -1035,7 +1102,10 @@ class CLI:
         try:
             sql_files = self.read_schema_index(index_sha1, check_sha=check_sha)
         except FileNotFoundError:
-            raise err.IntegrityError(f"index file not found, {plan}, id={index_sha1}")
+            raise err.IntegrityError(
+                f"index file not found, {plan}, missing file:"
+                f" {self._schema_store_file_full_path(index_sha1)}"
+            )
         # check sql file exist
         for sql_sha1, sql_filename in sql_files:
             sql_file_path = os.path.join(
@@ -1055,9 +1125,10 @@ class CLI:
                     actual_sha1 = self.sha1_encode([content])
                     if actual_sha1 != sql_sha1:
                         raise err.IntegrityError(
-                            f"sql file sha1 not match, {plan},"
+                            f"sql file SHA1 not match, {plan},"
                             f" original filename={sql_filename},"
-                            f" expected_sha1={sql_sha1}, actual_sha1={actual_sha1}"
+                            f" expected_sha1={sql_sha1}, actual_sha1={actual_sha1},"
+                            f" file={sql_file_path}"
                         )
 
     def _check_data_migration(self, plan: mp.MigrationPlan):

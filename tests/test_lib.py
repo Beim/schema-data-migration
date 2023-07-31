@@ -1,5 +1,6 @@
 import os
 from argparse import Namespace
+from typing import List
 
 import pytest
 from sqlalchemy import text
@@ -359,6 +360,42 @@ def test_integrity_check_for_data(sort_plan_by_version):
     cli = CLI(args=make_args({}))
     with pytest.raises(err.IntegrityError):
         cli.check_integrity()
+
+
+def test_clean_schema_store(sort_plan_by_version):
+    init_workspace()
+    make_schema_migration_plan()
+    migrate_dev()
+
+    # write unexpected file to schema store
+    with open(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, "foo"), "w"
+    ) as f:
+        f.write("bar")
+    with open(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, "00/11"), "w"
+    ) as f:
+        f.write("22")
+
+    cli = CLI(
+        args=make_args(
+            {
+                "dry_run": True,
+            }
+        )
+    )
+    unexpected_files: List[str] = cli.clean_schema_store()
+    assert len(unexpected_files) == 2
+
+    cli = CLI(args=make_args({}))
+    unexpected_files: List[str] = cli.clean_schema_store()
+    assert len(unexpected_files) == 2
+    assert not os.path.exists(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, "foo")
+    )
+    assert not os.path.exists(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, "00/11")
+    )
 
 
 def test_migrate(sort_plan_by_version):

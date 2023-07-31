@@ -275,6 +275,9 @@ class MigrationPlanManager:
     def get_plans(self) -> List[MigrationPlan]:
         return self.plans
 
+    def get_plans_by_type(self, type: Type) -> List[MigrationPlan]:
+        return [p for p in self.plans if p.type == type]
+
     def get_plan_by_index(self, index: int) -> MigrationPlan:
         return self.plans[index]
 
