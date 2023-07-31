@@ -460,8 +460,11 @@ def test_migrate(sort_plan_by_version):
         }
     )
     cli = CLI(args=args)
-    info = cli.info()
-    assert len(info) == 4  # it should contain unapplied migration plans
+    is_consistent, len_applied, len_unexpected, len_unapplied = cli.info()
+    assert len_applied == 1
+    assert len_unexpected == 0
+    assert len_unapplied == 3
+    assert not is_consistent
 
     # migrate dev environment
     # it should bring the new table back

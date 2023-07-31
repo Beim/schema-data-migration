@@ -271,10 +271,9 @@ class CLI:
         self.dao = hist_dao.MigrationHistoryDAO(session)
         return self.dao
 
-    def _get_and_check_migration_histories(
-        self, fix: bool = False
-    ) -> List[model.MigrationHistory]:
-        migration_histories = self.dao.get_all()
+    def _check_migration_histories(
+        self, migration_histories: List[model.MigrationHistory], fix: bool = False
+    ):
         if len(migration_histories) > self.mpm.count():
             raise Exception(
                 "unexpected migration history,"
@@ -292,15 +291,19 @@ class CLI:
                     ):
                         continue
                 raise Exception(
-                    f"history is not successful, idx={idx}, ver={hist.ver},"
-                    f" name={hist.name}"
+                    f"migration is not successful, ver={hist.ver}, name={hist.name}"
                 )
             plan = self.mpm.get_plan_by_index(idx)
             if not hist.can_match(plan.version, plan.name):
                 raise Exception(
-                    f"unexpected migration history, idx={idx}, ver={hist.ver},"
-                    f" name={hist.name}"
+                    f"unexpected migration history, ver={hist.ver}, name={hist.name}"
                 )
+
+    def _get_and_check_migration_histories(
+        self, fix: bool = False
+    ) -> List[model.MigrationHistory]:
+        migration_histories = self.dao.get_all()
+        self._check_migration_histories(migration_histories, fix=fix)
         return migration_histories
 
     def fix_rollback(self):
@@ -776,51 +779,102 @@ class CLI:
         # https://stackoverflow.com/questions/39872088/executing-interactive-shell-script-in-python
         return call_skeema(raw_args, cwd)
 
-    def info(self) -> List[str]:
-        self.read_migration_plans()
-        dao = self.build_dao()
-        with dao.session.begin():
-            hist_list = self._get_and_check_migration_histories()
-
-        output = [
-            [
-                h.ver,
-                h.name,
-                self.mpm.must_get_plan_by_signature(
-                    mp.MigrationSignature(h.ver, h.name)
-                )[0].type,
-                h.state.name,
-                h.created,
-                h.updated,
-            ]
-            for h in hist_list
-        ]
-
-        unapplied_plans = self.mpm.must_get_plan_between(len(hist_list), None)
-        output.extend(
-            [
-                [
-                    p.version,
-                    p.name,
-                    str(p.type),
-                    "NOT APPLIED",
-                    "",
-                    "",
-                ]
-                for p in unapplied_plans
-            ]
-        )
-
+    def _print_info_as_table(
+        self, prompt: str, output: List[List[str]], headers: List[str]
+    ):
+        if len(output) == 0:
+            return
         logger.info(
-            "migration history:\n"
+            prompt
+            + "\n"
             + tabulate(
                 output,
-                headers=["ver", "name", "type", "state", "created", "updated"],
+                headers=headers,
                 tablefmt="orgtbl",
             )
         )
 
-        return output
+    def info(self) -> Tuple[bool, int, int, int]:
+        self.read_migration_plans()
+        dao = self.build_dao()
+        with dao.session.begin():
+            hist_list = self.dao.get_all()
+
+        is_migration_history_consistent = True
+        output: List[List[str]] = []
+
+        min_len = min(len(hist_list), self.mpm.count())
+
+        for idx in range(min_len):
+            hist = hist_list[idx]
+            plan = self.mpm.get_plan_by_index(idx)
+            if not hist.can_match(plan.version, plan.name):
+                is_migration_history_consistent = False
+                break
+            output.append(
+                [
+                    hist.ver,
+                    hist.name,
+                    plan.type,
+                    hist.state.name,
+                    hist.created,
+                    hist.updated,
+                ]
+            )
+        # print applied migration history
+        self._print_info_as_table(
+            "Applied migration history:",
+            output,
+            ["ver", "name", "type", "state", "created", "updated"],
+        )
+        len_applied = len(output)
+
+        if is_migration_history_consistent:
+            hists_to_print = hist_list[idx + 1 :]
+            plans_to_print = self.mpm.get_plans()[idx + 1 :]
+            if len(hists_to_print) > 0 or len(plans_to_print) > 0:
+                is_migration_history_consistent = False
+        else:
+            hists_to_print = hist_list[idx:]
+            plans_to_print = self.mpm.get_plans()[idx:]
+
+        # print unexpected migration history
+        output = [
+            [
+                hist.ver,
+                hist.name,
+                hist.state.name,
+                hist.created,
+                hist.updated,
+            ]
+            for hist in hists_to_print
+        ]
+        self._print_info_as_table(
+            "Unexpected migration history:",
+            output,
+            ["ver", "name", "state", "created", "updated"],
+        )
+        len_unexpected = len(output)
+
+        # print unapplied migration plans
+        output = [
+            [
+                p.version,
+                p.name,
+                str(p.type),
+            ]
+            for p in plans_to_print
+        ]
+        self._print_info_as_table(
+            "Unapplied migration plans:", output, ["ver", "name", "type"]
+        )
+        len_unapplied = len(output)
+        return (
+            is_migration_history_consistent,
+            len_applied,
+            len_unexpected,
+            len_unapplied,
+        )
 
     def pull(self):
         env_or_version = self.args.env_or_version

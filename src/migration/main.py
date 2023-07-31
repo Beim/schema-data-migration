@@ -433,7 +433,11 @@ def main(raw_args):
         case Command.MAKE_DATA | Command.ALIAS_MAKE_DATA:
             cli.make_data_migration()
         case Command.INFO:
-            cli.info()
+            is_consistent, _, _, _ = cli.info()
+            if not is_consistent:
+                raise Exception(
+                    "Migration history is not consistent with migration plans"
+                )
         case Command.DIFF:
             cli.diff()
         case Command.PULL:
