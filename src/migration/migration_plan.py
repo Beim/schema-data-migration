@@ -131,14 +131,12 @@ class MigrationPlan:
     def to_json_str(self):
         return json.dumps(self, cls=EnhancedJSONEncoder, indent=4)
 
-    def to_log_str(self):
-        return json.dumps(
-            {
-                "version": self.version,
-                "name": self.name,
-                "type": str(self.type),
-            }
-        )
+    def to_dict_for_log(self):
+        return {
+            "version": self.version,
+            "name": self.name,
+            "type": str(self.type),
+        }
 
     def save(self) -> str:
         if not self.version.isdigit() or int(self.version) < 0:

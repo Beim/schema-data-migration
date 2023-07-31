@@ -1,3 +1,4 @@
+import json
 from enum import StrEnum
 from typing import List
 
@@ -20,7 +21,10 @@ class MigrationHistoryDAO:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def add_one(self, plan: mp.MigrationPlan, operator: str = "") -> None:
+    def add_one(
+        self, plan: mp.MigrationPlan, operator: str = "", fake: bool = False
+    ) -> None:
+        # add migration history
         hist = model.MigrationHistory(
             ver=plan.version,
             name=plan.name,
@@ -28,29 +32,42 @@ class MigrationHistoryDAO:
         )
         self.session.add(hist)
         self.session.flush()
+        # add log
         log = model.MigrationHistoryLog(
             hist_id=hist.id,
             operation=Operation.CREATE,
             operator=operator,
-            snapshot=plan.to_log_str(),
+            snapshot=self._gen_snapshot_log(plan, fake),
         )
         self.session.add(log)
 
-    def update_succ(self, plan: mp.MigrationPlan, operator: str = "") -> None:
+    def update_succ(
+        self, plan: mp.MigrationPlan, operator: str = "", fake: bool = False
+    ) -> None:
         self._update(
             plan,
             model.MigrationState.SUCCESSFUL,
             Operation.UPDATE_SUCC,
             operator=operator,
+            fake=fake,
         )
 
-    def update_rollback(self, plan: mp.MigrationPlan, operator: str = "") -> None:
+    def update_rollback(
+        self, plan: mp.MigrationPlan, operator: str = "", fake: bool = False
+    ) -> None:
         self._update(
             plan,
             model.MigrationState.ROLLBACKING,
             Operation.UPDATE_ROLLBACK,
             operator=operator,
+            fake=fake,
         )
+
+    def _gen_snapshot_log(self, plan: mp.MigrationPlan, fake: bool) -> str:
+        plan_for_log = plan.to_dict_for_log()
+        if fake:
+            plan_for_log.update({"fake": fake})
+        return json.dumps(plan_for_log)
 
     def _update(
         self,
@@ -58,7 +75,9 @@ class MigrationHistoryDAO:
         state: model.MigrationState,
         operation: Operation,
         operator: str = "",
+        fake: bool = False,
     ) -> None:
+        # update migration history
         stmt = (
             select(model.MigrationHistory)
             .where(
@@ -69,16 +88,19 @@ class MigrationHistoryDAO:
         )
         hist = self.session.scalars(stmt).one()
         hist.state = state
-
+        # add log
         log = model.MigrationHistoryLog(
             hist_id=hist.id,
             operation=operation,
             operator=operator,
-            snapshot=plan.to_log_str(),
+            snapshot=self._gen_snapshot_log(plan, fake),
         )
         self.session.add(log)
 
-    def delete(self, plan: mp.MigrationPlan, operator: str = "") -> None:
+    def delete(
+        self, plan: mp.MigrationPlan, operator: str = "", fake: bool = False
+    ) -> None:
+        # delete migration history
         stmt = (
             select(model.MigrationHistory)
             .where(
@@ -89,12 +111,12 @@ class MigrationHistoryDAO:
         )
         hist = self.session.scalars(stmt).one()
         self.session.delete(hist)
-
+        # add log
         log = model.MigrationHistoryLog(
             hist_id=hist.id,
             operation=Operation.DELETE,
             operator=operator,
-            snapshot=plan.to_log_str(),
+            snapshot=self._gen_snapshot_log(plan, fake),
         )
         self.session.add(log)
 

@@ -324,11 +324,11 @@ class CLI:
             if forward:
                 if not fake:
                     self.migrator.forward(target_plan, self.args)
-                dao.update_succ(target_plan, operator=operator)
+                dao.update_succ(target_plan, operator=operator, fake=fake)
             else:
                 if not fake:
                     self.migrator.backward(target_plan, self.args)
-                dao.delete(target_plan, operator=operator)
+                dao.delete(target_plan, operator=operator, fake=fake)
             dao.commit()
 
         pass
@@ -398,7 +398,7 @@ class CLI:
                 if dry_run:
                     self.print_dry_run(new_plans, is_migrate=True)
                     return
-                dao.add_one(new_plans[0], operator=operator)
+                dao.add_one(new_plans[0], operator=operator, fake=fake)
                 dao.commit()
 
         while len(new_plans) > 0:
@@ -420,10 +420,10 @@ class CLI:
                         f"unexpected migration history state, ver={latest_hist.ver},"
                         f" name={latest_hist.name}, state={latest_hist.state}"
                     )
-                dao.update_succ(new_plans[0], operator=operator)
+                dao.update_succ(new_plans[0], operator=operator, fake=fake)
                 new_plans = new_plans[1:]
                 if len(new_plans) > 0:
-                    dao.add_one(new_plans[0], operator=operator)
+                    dao.add_one(new_plans[0], operator=operator, fake=fake)
                 dao.commit()
 
     def rollback(self):
@@ -458,7 +458,7 @@ class CLI:
                     self.print_dry_run(to_rollback_cfgs, is_migrate=False)
                     return
 
-                dao.update_rollback(to_rollback_cfgs[-1], operator=operator)
+                dao.update_rollback(to_rollback_cfgs[-1], operator=operator, fake=fake)
                 dao.commit()
 
         while len(to_rollback_cfgs) > 0:
@@ -482,10 +482,12 @@ class CLI:
                         f"unexpected migration history state, ver={latest_hist.ver},"
                         f" name={latest_hist.name}, state={latest_hist.state}"
                     )
-                dao.delete(to_rollback_cfgs[-1], operator=operator)
+                dao.delete(to_rollback_cfgs[-1], operator=operator, fake=fake)
                 to_rollback_cfgs = to_rollback_cfgs[:-1]
                 if len(to_rollback_cfgs) > 0:
-                    dao.update_rollback(to_rollback_cfgs[-1], operator=operator)
+                    dao.update_rollback(
+                        to_rollback_cfgs[-1], operator=operator, fake=fake
+                    )
                 dao.commit()
 
     def _clear(self, schema: str):
