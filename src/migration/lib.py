@@ -24,6 +24,12 @@ from .env import cli_env
 logger = logging.getLogger(__name__)
 
 
+def check_file_existence(paths: List[str]):
+    for path in paths:
+        if os.path.exists(path):
+            raise Exception(f"{path} already exists")
+
+
 def call_skeema(raw_args: List[str], cwd: str = cli_env.MIGRATION_CWD, env=None):
     # https://stackoverflow.com/questions/39872088/executing-interactive-shell-script-in-python
     cmd = f"{cli_env.SKEEMA_CMD_PATH} " + " ".join(raw_args)
@@ -530,13 +536,13 @@ class CLI:
             ]
         )
 
-    def init(self):
-        author = self.args.author if "author" in self.args else ""
-        # init migration plan dir
+    def _init_migration_plan_dir(self):
         os.makedirs(
             os.path.join(cli_env.MIGRATION_CWD, cli_env.MIGRATION_PLAN_DIR),
             exist_ok=False,
         )
+
+    def _init_schema_dir(self):
         # init schema dir
         call_skeema(
             [
@@ -559,22 +565,53 @@ class CLI:
             os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, ".skeema"),
             os.path.join(cli_env.MIGRATION_CWD, cli_env.ENV_INI_FILE),
         )
-        # init schema store dir
+
+    def _init_schema_store_dir(self):
         os.makedirs(
             os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR),
             exist_ok=False,
         )
         hex_list = [format(i, "02x") for i in range(256)]
         for hex in hex_list:
+            hex_dir_path = os.path.join(
+                cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, hex
+            )
             os.makedirs(
-                os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, hex),
+                hex_dir_path,
                 exist_ok=False,
             )
+            with open(os.path.join(hex_dir_path, ".gitkeep"), "w") as f:
+                f.write("")
+
+    def _init_file_existence_check(self):
+        check_file_existence(
+            [
+                os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR),
+                os.path.join(cli_env.MIGRATION_CWD, cli_env.MIGRATION_PLAN_DIR),
+                os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR),
+                os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR),
+                os.path.join(cli_env.MIGRATION_CWD, cli_env.ENV_INI_FILE),
+                os.path.join(cli_env.MIGRATION_CWD, ".gitignore"),
+                os.path.join(cli_env.MIGRATION_CWD, "pre-commit"),
+                os.path.join(cli_env.MIGRATION_CWD, "package.json"),
+                os.path.join(cli_env.MIGRATION_CWD, "tsconfig.json"),
+                os.path.join(cli_env.MIGRATION_CWD, ".env"),
+            ]
+        )
+
+    def init(self):
+        author = self.args.author if "author" in self.args else ""
+        self._init_file_existence_check()
+        self._init_migration_plan_dir()
+        self._init_schema_dir()
+        self._init_schema_store_dir()
+
         # move schema files to schema store
         sql_files, index_sha1, index_content = self.read_sql_files()
         self.write_schema_store(index_sha1, index_content)
         for f in sql_files:
             self.write_schema_store(f.sha1, f.content)
+
         # init first migration plan
         init_plan = mp.MigrationPlan(
             version=mp.InitialMigrationSignature.version,
@@ -585,14 +622,18 @@ class CLI:
             dependencies=[],
         )
         init_plan.save()
+
         # make data dir
         os.makedirs(os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR))
+
         # create gitignore
         with open(os.path.join(cli_env.MIGRATION_CWD, ".gitignore"), "w") as f:
             f.write(cli_env.SAMPLE_GIT_IGNORE)
+
         # create pre-commit hook
         with open(os.path.join(cli_env.MIGRATION_CWD, "pre-commit"), "w") as f:
             f.write(cli_env.SAMPLE_PRE_COMMIT)
+
         # create dot env file
         dot_env_file_path = os.path.join(cli_env.MIGRATION_CWD, ".env")
         with open(dot_env_file_path, "w") as f:
@@ -602,6 +643,7 @@ class CLI:
         # create package.json
         with open(os.path.join(cli_env.MIGRATION_CWD, "package.json"), "w") as f:
             f.write(cli_env.SAMPLE_PCKAGE_JSON)
+
         # create tsconfig.json
         with open(os.path.join(cli_env.MIGRATION_CWD, "tsconfig.json"), "w") as f:
             f.write(cli_env.SAMPLE_TSCONFIG_JSON)
