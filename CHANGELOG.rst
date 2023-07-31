@@ -28,3 +28,12 @@ Version 0.1.1
 =============
 
 - Fix: reduce docker image size
+
+Version 0.2.0
+=============
+
+- Add `clean` command to clean up out of source control files in .schema_store
+- Add shortcut for `fix migrate/rollback` command
+- Log --fake flag in _migration_history_log table
+- Fix: `info` command print unxpected migration history instead of throw error
+- Fix: Add .gitkeep to directories in .schema_store to make sure they are tracked by git 

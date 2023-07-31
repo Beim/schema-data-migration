@@ -656,6 +656,19 @@ The skchema-data-migration tool creates two tables in the database by default: `
 
 You can change the default database name by setting environment variable: `TABLE_MIGRATION_HISTORY` and `TABLE_MIGRATION_HISTORY`.
 
+## Unexpected files in .schema_store directory
+
+When you're developing a schema migration plan, you might create and delete different versions of it until you're satisfied. However, some SQL files that were changed in the process will be copied to the .schema_store directory and become useless, since they're not linked to any migration plan and will never be used.
+
+To find and delete these unnecessary files, you can use the following command:
+
+```bash
+sdm clean store --dry-run
+sdm clean store
+```
+
+The first command will show you which files would be deleted without actually deleting them (a "dry run"), while the second command will actually delete the files.
+
 ## Online schema change
 
 - https://www.skeema.io/docs/options/#alter-wrapper
