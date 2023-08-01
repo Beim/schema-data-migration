@@ -54,6 +54,9 @@ sdm make-schema [--author AUTHOR] name
 # available types: sql,sql_file,python,shell,typescript
 sdm make-data [--author AUTHOR] name type
 
+# Make repeatable migration plan
+sdm make-repeatable [--author AUTHOR] name type
+
 # Migrate to a specific version or latest
 sdm migrate [-v VERSION] [-n NAME] [--fake] [--dry-run] [-o OPERATOR] environment
 

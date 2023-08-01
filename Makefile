@@ -13,6 +13,10 @@ test:
 	pip install .
 	python -m pytest ./tests
 
+single_test:
+	pip install .
+	python -m pytest ./tests -k $(t)
+
 collect:
 	pip install .
 	python -m pytest --collect-only ./tests

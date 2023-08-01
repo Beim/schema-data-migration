@@ -18,12 +18,17 @@ def set_log() -> None:
         "%(asctime)s [%(levelname)s]  %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    filter = MyFilter()
+    filter = MyFilter()  # TODO remove the unused filter
+
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
     handler.addFilter(filter)
+
+    file_handler = logging.FileHandler(log_env.LOG_FILE)
+    file_handler.setFormatter(formatter)
+
     logging.basicConfig(
-        handlers=[handler],
+        handlers=[handler, file_handler],
         level=logging._nameToLevel.get(log_env.LOG_LEVEL),
         force=True,
     )

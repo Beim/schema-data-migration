@@ -94,11 +94,12 @@ class Migrator:
 
 class CLIMigrator(Migrator):
     def forward(self, migration_plan: mp.MigrationPlan, args: Namespace):
+        logger.info(f"Executing {migration_plan}")
         if migration_plan.type == mp.Type.SCHEMA:
             sha1 = migration_plan.change.forward.id
             self.move_schema_to(sha1, args)
             return
-        if migration_plan.type == mp.Type.DATA:
+        if migration_plan.type in [mp.Type.DATA, mp.Type.REPEATABLE]:
             if migration_plan.change.forward.type == mp.DataChangeType.SQL:
                 self.migrate_data_sql(migration_plan.change.forward.sql, args)
                 return
@@ -120,6 +121,7 @@ class CLIMigrator(Migrator):
                 return
 
     def backward(self, migration_plan: mp.MigrationPlan, args: Namespace):
+        logger.info(f"Rollbacking {migration_plan}")
         if migration_plan.type == mp.Type.SCHEMA:
             sha1 = migration_plan.change.backward.id
             self.move_schema_to(sha1, args)
@@ -299,10 +301,10 @@ class CLI:
                     f"unexpected migration history, ver={hist.ver}, name={hist.name}"
                 )
 
-    def _get_and_check_migration_histories(
+    def _get_and_check_versioned_migration_histories(
         self, fix: bool = False
     ) -> List[model.MigrationHistory]:
-        migration_histories = self.dao.get_all()
+        migration_histories = self.dao.get_all_versioned()
         self._check_migration_histories(migration_histories, fix=fix)
         return migration_histories
 
@@ -316,7 +318,9 @@ class CLI:
 
         dao = self.build_dao()
         with dao.session.begin():
-            migration_histories = self._get_and_check_migration_histories(fix=True)
+            migration_histories = self._get_and_check_versioned_migration_histories(
+                fix=True
+            )
             if (
                 len(migration_histories) == 0
                 or migration_histories[-1].state == model.MigrationState.SUCCESSFUL
@@ -334,10 +338,7 @@ class CLI:
                 dao.delete(target_plan, operator=operator, fake=fake)
             dao.commit()
 
-        pass
-
     def print_dry_run(self, plans: List[mp.MigrationPlan], is_migrate: bool):
-        logger.info("running in dry run mode, no migration will be executed")
         new_plans = plans if is_migrate else reversed(plans)
         print(
             tabulate(
@@ -370,26 +371,27 @@ class CLI:
             )
         )
 
-    def migrate(self):
-        self.read_migration_plans()
-        self._check_integrity()
-        ver = (
-            self.args.version.zfill(4)
-            if ("version" in self.args) and (self.args.version is not None)
-            else None
-        )
-        name = self.args.name if "name" in self.args else None
-        fake = self.args.fake if "fake" in self.args else False
-        dry_run = self.args.dry_run if "dry_run" in self.args else False
-        operator = self.args.operator if "operator" in self.args else ""
-
+    def _migrate_versioned(
+        self, ver: str, name: str, fake: bool, dry_run: bool, operator: str = ""
+    ) -> List[mp.MigrationPlan]:
+        """
+        Apply versioned migration plans
+        return applied plans
+        """
         dao = self.build_dao()
+        applied_plans: List[mp.MigrationPlan] = []
         with dao.session.begin():
-            migration_histories = self._get_and_check_migration_histories()
-            if len(migration_histories) == self.mpm.count():
-                return
+            versioned_migration_histories = (
+                self._get_and_check_versioned_migration_histories()
+            )
+            len_applied_versioned = len(versioned_migration_histories)
+            applied_plans = self.mpm.get_plans()[:len_applied_versioned]
 
-            next_plan_index = len(migration_histories)
+            # versioned migration has been applied
+            if len_applied_versioned == self.mpm.count():
+                return applied_plans
+            # create new migration history if needed
+            next_plan_index = len_applied_versioned
             if ver is None:
                 new_plans = self.mpm.must_get_plan_between(next_plan_index, None)
             else:
@@ -399,8 +401,9 @@ class CLI:
                 )
             if len(new_plans) > 0:
                 if dry_run:
+                    logger.info("migration plans to execute:")
                     self.print_dry_run(new_plans, is_migrate=True)
-                    return
+                    return applied_plans
                 dao.add_one(new_plans[0], operator=operator, fake=fake)
                 dao.commit()
 
@@ -408,9 +411,9 @@ class CLI:
             # migrate operation
             if not fake:
                 self.migrator.forward(new_plans[0], self.args)
-
+            # update migration history and create new migration history if needed
             with dao.session.begin():
-                latest_hist = dao.get_latest()
+                latest_hist = dao.get_latest_versioned()
                 if latest_hist is None:
                     raise Exception("unexpected migration history, latest_hist is None")
                 if not latest_hist.can_match(new_plans[0].version, new_plans[0].name):
@@ -424,10 +427,121 @@ class CLI:
                         f" name={latest_hist.name}, state={latest_hist.state}"
                     )
                 dao.update_succ(new_plans[0], operator=operator, fake=fake)
+                applied_plans.append(new_plans[0])
                 new_plans = new_plans[1:]
                 if len(new_plans) > 0:
                     dao.add_one(new_plans[0], operator=operator, fake=fake)
                 dao.commit()
+
+        return applied_plans
+
+    def migrate(self):
+        ver = (
+            self.args.version.zfill(4)
+            if ("version" in self.args) and (self.args.version is not None)
+            else None
+        )
+        name = self.args.name if "name" in self.args else None
+        fake = self.args.fake if "fake" in self.args else False
+        dry_run = self.args.dry_run if "dry_run" in self.args else False
+        operator = self.args.operator if "operator" in self.args else ""
+
+        if dry_run:
+            logger.info("running in dry run mode, no migration will be executed")
+
+        self.read_migration_plans()
+        self._check_integrity()
+
+        logger.debug(
+            f"migrate options: ver={ver}, name={name}, fake={fake}, dry_run={dry_run}"
+        )
+
+        # versioned migration
+        applied_plans: List[mp.MigrationPlan] = self._migrate_versioned(
+            ver, name, fake, dry_run, operator=operator
+        )
+        # repeatable migration
+        self._migrate_repeatable(applied_plans, ver, name, dry_run, operator=operator)
+
+    def _migrate_repeatable(
+        self,
+        applied_histories: List[model.MigrationHistory],
+        ver: str,
+        name: str,
+        dry_run: bool,
+        operator: str = "",
+    ):
+        if dry_run:
+            # since it's dry_run, assume the target version is the latest version
+            if ver is not None:
+                applied_plans = self.mpm.must_get_plan_between(
+                    0, mp.MigrationSignature(version=ver, name=name)
+                )
+            else:
+                applied_plans = self.mpm.get_plans()
+            to_execute_plans = self._get_to_execute_repeatable_plans(applied_plans)
+            if len(to_execute_plans) > 0:
+                logger.info("repeatable migration plans to execute:")
+                self.print_dry_run(to_execute_plans, is_migrate=True)
+            return
+
+        to_execute_plans = self._get_to_execute_repeatable_plans(applied_histories)
+        if len(to_execute_plans) == 0:
+            logger.debug("no valid repeatable migration to execute")
+            return
+
+        dao = self.dao
+        for plan in to_execute_plans:
+            # try get the migration history
+            with dao.session.begin():
+                hist = dao.get_by_sig(plan.sig())
+                if hist is None:
+                    dao.add_one(plan, operator=operator)
+                else:
+                    # no need to check if state is SUCCESSFUL,
+                    #   because it is repeatable migration
+                    # just treat updating PROCESSING to PROCESSING
+                    #   as retry the migration
+                    dao.update_processing(plan, operator=operator)
+                dao.commit()
+            # execute the migration
+            self.migrator.forward(plan, self.args)
+
+            with dao.session.begin():
+                dao.update_succ(plan, operator=operator)
+
+    def _get_to_execute_repeatable_plans(
+        self, applied_plans: List[mp.MigrationPlan]
+    ) -> List[mp.MigrationPlan]:
+        # get repeatable migration plans
+        plans = self.mpm.get_repeatable_plans()
+        # check if repeatable migration can be executed
+        to_execute_plans: List[mp.MigrationPlan] = []
+        for p in plans:
+            if p.dependencies is not None and len(p.dependencies) > 0:
+                dep_sig = p.dependencies[0]
+                # check if dep_sig is in applied_histories
+                if not any(ap.match(dep_sig) for ap in applied_plans):
+                    logger.warning(
+                        "repeatable migration %s is not executed because dependency %s"
+                        " is not applied",
+                        p,
+                        dep_sig,
+                    )
+                    continue
+            if p.ignore_after is not None:
+                ignore_sig = p.ignore_after
+                # check if ignore_sig is in applied_histories
+                if any(ap.match(dep_sig) for ap in applied_plans):
+                    logger.debug(
+                        "repeatable migration %s is not executed because ignore_after"
+                        " %s is applied",
+                        p,
+                        ignore_sig,
+                    )
+                    continue
+            to_execute_plans.append(p)
+        return to_execute_plans
 
     def rollback(self):
         self.read_migration_plans()
@@ -443,7 +557,7 @@ class CLI:
 
         dao = self.build_dao()
         with dao.session.begin():
-            migration_histories = self._get_and_check_migration_histories()
+            migration_histories = self._get_and_check_versioned_migration_histories()
 
             latest_migration_plan_index = len(migration_histories) - 1
 
@@ -458,6 +572,7 @@ class CLI:
 
             if len(to_rollback_cfgs) > 0:
                 if dry_run:
+                    logger.info("migration plans to rollback:")
                     self.print_dry_run(to_rollback_cfgs, is_migrate=False)
                     return
 
@@ -470,7 +585,7 @@ class CLI:
                 self.migrator.backward(to_rollback_cfgs[-1], self.args)
 
             with dao.session.begin():
-                latest_hist = dao.get_latest()
+                latest_hist = dao.get_latest_versioned()
                 if latest_hist is None:
                     raise Exception("unexpected migration history, latest_hist is None")
                 if not latest_hist.can_match(
@@ -671,6 +786,48 @@ class CLI:
         index_content = "\n".join([f"{f.sha1}:{f.name}" for f in sql_files])
         return sql_files, index_sha1, index_content
 
+    def make_repeatable_migration(self) -> str:
+        name = self.args.name
+        author = self.args.author if "author" in self.args else ""
+        data_change_type = self.args.type
+        if not mp.DataChangeType.is_valid(data_change_type):
+            raise Exception(f"invalid type {data_change_type}")
+        self.read_migration_plans()
+        if self.mpm.count() == 0:
+            raise Exception("no migration plan found, run migration init first")
+        next_plan = mp.MigrationPlan(
+            version=mp.RepeatableVersion,
+            name=name,
+            author=author,
+            type=mp.Type.REPEATABLE,
+            change=mp.Change(
+                forward=mp.DataForward(type=data_change_type),
+                backward=None,
+            ),
+            dependencies=[],
+            ignore_after=None,
+        )
+
+        match data_change_type:
+            case mp.DataChangeType.SQL:
+                next_plan.change.forward.sql = (
+                    "INSERT INTO `testtable` (`id`, `name`) VALUES (1, 'foo.bar') ON"
+                    " DUPLICATE KEY UPDATE `name` = 'foo.bar';"
+                )
+            case mp.DataChangeType.SQL_FILE:
+                next_plan.change.forward.sql_file = "your_sql_file.sql"
+            case mp.DataChangeType.PYTHON:
+                next_plan.change.forward.python_file = "your_python_file.py"
+                logger.info("Sample python file:\n%s", cli_env.SAMPLE_PYTHON_FILE)
+            case mp.DataChangeType.SHELL:
+                next_plan.change.forward.shell_file = "your_shell_file.sh"
+                logger.info("Sample shell file:\n%s", cli_env.SAMPLE_SHELL_FILE)
+            case mp.DataChangeType.TYPESCRIPT:
+                next_plan.change.forward.typescript_file = "your_typescript_file.ts"
+                logger.info("Sample typescript file:\n%s", cli_env.SAMPLE_MIGRATION_TS)
+
+        return next_plan.save()
+
     def make_data_migration(self) -> str:
         name = self.args.name
         author = self.args.author if "author" in self.args else ""
@@ -797,14 +954,11 @@ class CLI:
     def info(self) -> Tuple[bool, int, int, int]:
         self.read_migration_plans()
         dao = self.build_dao()
-        with dao.session.begin():
-            hist_list = self.dao.get_all()
-
+        hist_list = dao.get_all_versioned_dto()
         is_migration_history_consistent = True
         output: List[List[str]] = []
-
         min_len = min(len(hist_list), self.mpm.count())
-
+        idx = 0
         for idx in range(min_len):
             hist = hist_list[idx]
             plan = self.mpm.get_plan_by_index(idx)
@@ -1130,6 +1284,8 @@ class CLI:
                 self._check_data_migration(plan)
             else:
                 raise err.IntegrityError(f"unknown type, type={plan.type}")
+        for plan in self.mpm.get_repeatable_plans():
+            self._check_data_migration(plan)
 
     def _check_schema_migration(
         self,
@@ -1230,7 +1386,5 @@ class CLI:
 
         check_forward_or_backward(plan.change.forward)
 
-        if plan.change.backward is None:
-            return
-
-        check_forward_or_backward(plan.change.backward)
+        if plan.change.backward is not None:
+            check_forward_or_backward(plan.change.backward)

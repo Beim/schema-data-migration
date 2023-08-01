@@ -26,6 +26,10 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 class Type(StrEnum):
     SCHEMA = "schema"
     DATA = "data"
+    REPEATABLE = "repeatable"
+
+
+VERSIONED_TYPES = [Type.SCHEMA, Type.DATA]
 
 
 class DataChangeType(StrEnum):
@@ -114,6 +118,7 @@ class MigrationSignature:
 
 
 InitialMigrationSignature = MigrationSignature(version="0000", name="init")
+RepeatableVersion = "R"
 
 
 @dataclass
@@ -124,6 +129,7 @@ class MigrationPlan:
     type: Optional[Type | str]
     change: Change
     dependencies: List[MigrationSignature]
+    ignore_after: Optional[MigrationSignature | None] = None
 
     def __str__(self) -> str:
         return f"MigrationPlan({self.version}_{self.name})"
@@ -139,12 +145,19 @@ class MigrationPlan:
         }
 
     def save(self) -> str:
-        if not self.version.isdigit() or int(self.version) < 0:
-            raise Exception(f"Invalid version {self.version}")
+        match self.type:
+            case Type.SCHEMA | Type.DATA:
+                if not self.version.isdigit() or int(self.version) < 0:
+                    raise Exception(f"Invalid version {self.version}")
+            case Type.REPEATABLE:
+                if self.version != RepeatableVersion:
+                    raise Exception(f"Invalid version {self.version}")
+            case _:
+                raise Exception(f"Invalid type {self.type}")
         if not re.match(r"^[a-zA-Z0-9_]+$", self.name):
-            raise Exception(f"Invalid name {self.name}")
-        if not (self.type == Type.SCHEMA or self.type == Type.DATA):
-            raise Exception(f"Invalid type {self.type}")
+            raise Exception(
+                f"Invalid name {self.name}, only alphanumeric and _ allowed"
+            )
 
         filepath = os.path.join(
             cli_env.MIGRATION_CWD,
@@ -188,12 +201,14 @@ _sort_migration_plans_by = _default_sort_migration_plans_by
 class MigrationPlanManager:
     def __init__(self, plans: Optional[List[MigrationPlan]] = None):
         if plans is None:
-            self.plans = self._read_migration_plans()
+            self.plans, self.repeatable_plans = self._read_migration_plans()
         else:
-            self.plans = plans
+            self.plans = plans  # TODO remove this because it is not used
+            self.repeatable_plans = None
 
-    def _read_migration_plans(self) -> List[MigrationPlan]:
+    def _read_migration_plans(self) -> Tuple[List[MigrationPlan], List[MigrationPlan]]:
         plans = []
+        repeatable_plans = []
         file_dir = os.path.join(cli_env.MIGRATION_CWD, cli_env.MIGRATION_PLAN_DIR)
         for root, _, files in os.walk(file_dir):
             for file in files:
@@ -202,9 +217,12 @@ class MigrationPlanManager:
                 with open(os.path.join(root, file)) as f:
                     data = json.load(f)
                     plan = dacite.from_dict(data_class=MigrationPlan, data=data)
-                    plans.append(plan)
+                    if plan.type == Type.REPEATABLE:
+                        repeatable_plans.append(plan)
+                    else:
+                        plans.append(plan)
         sorted_plans = MigrationPlanManager._sort_plans(plans)
-        return sorted_plans
+        return sorted_plans, repeatable_plans
 
     @staticmethod
     def _sort_plans(plans: List[MigrationPlan]) -> List[MigrationPlan]:
@@ -272,6 +290,15 @@ class MigrationPlanManager:
 
     def get_plans(self) -> List[MigrationPlan]:
         return self.plans
+
+    def get_repeatable_plans(self) -> List[MigrationPlan]:
+        return self.repeatable_plans
+
+    def get_repeatable_plan(self, name: str) -> MigrationPlan:
+        for plan in self.repeatable_plans:
+            if plan.name == name:
+                return plan
+        raise Exception(f"Cannot find repeatable plan with name {name}")
 
     def get_plans_by_type(self, type: Type) -> List[MigrationPlan]:
         return [p for p in self.plans if p.type == type]

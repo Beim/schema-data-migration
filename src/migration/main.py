@@ -110,6 +110,10 @@ def parse_info_args(parser: argparse.ArgumentParser):
     )
 
 
+def parse_make_repeatable_migration_args(parser: argparse.ArgumentParser):
+    parse_make_data_migration_args(parser)
+
+
 def parse_make_data_migration_args(parser: argparse.ArgumentParser):
     parser.add_argument(
         "name",
@@ -296,6 +300,9 @@ class Command(StrEnum):
     MAKE_SCHEMA = "make-schema"
     ALIAS_MAKE_SCHEMA = "ms"
 
+    MAKE_REPEATABLE = "make-repeatable"
+    ALIAS_MAKE_REPEATABLE = "mr"
+
     MAKE_DATA = "make-data"
     ALIAS_MAKE_DATA = "md"
 
@@ -373,6 +380,14 @@ def parse_args(args):
     )
     parse_make_data_migration_args(parser_make_data_migration)
 
+    # make repeatable
+    parser_make_repeatable_migration = subparsers.add_parser(
+        Command.MAKE_REPEATABLE,
+        help="generate repeatable migration plan",
+        aliases=[Command.ALIAS_MAKE_REPEATABLE],
+    )
+    parse_make_repeatable_migration_args(parser_make_repeatable_migration)
+
     # info
     parser_info = subparsers.add_parser(
         Command.INFO, help="show migration history information in the environment"
@@ -432,6 +447,8 @@ def main(raw_args):
             cli.make_schema_migration()
         case Command.MAKE_DATA | Command.ALIAS_MAKE_DATA:
             cli.make_data_migration()
+        case Command.MAKE_REPEATABLE | Command.ALIAS_MAKE_REPEATABLE:
+            cli.make_repeatable_migration()
         case Command.INFO:
             is_consistent, _, _, _ = cli.info()
             if not is_consistent:

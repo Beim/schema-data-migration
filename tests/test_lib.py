@@ -1,3 +1,4 @@
+import logging
 import os
 from argparse import Namespace
 from typing import List
@@ -10,6 +11,8 @@ from migration import migration_plan as mp
 from migration.db import model as dbmodel
 from migration.env import cli_env
 from migration.lib import CLI, Migrator
+
+logger = logging.getLogger(__name__)
 
 cli_env.ALLOW_UNSAFE = 1
 
@@ -76,29 +79,36 @@ def init_workspace():
         assert len(hists) == 1
 
 
-def make_schema_migration_plan() -> CLI:
+def make_schema_migration_plan(
+    name: str = "new_test_table", id_primary_key: bool = True
+) -> CLI:
     with open(
         os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, "testtable.sql"), "w"
     ) as f:
-        f.write("create table testtable (id int primary key, name varchar(255));")
-    args = make_args({"name": "new_test_table"})
+        if id_primary_key:
+            f.write("create table testtable (id int primary key, name varchar(255));")
+        else:
+            f.write("create table testtable (id int, name varchar(255));")
+    args = make_args({"name": name})
     cli = CLI(args=args)
     cli.make_schema_migration()
     return cli
 
 
 def migrate_dev():
-    args = make_args(
-        {
-            "environment": "dev",
-        }
+    cli = CLI(
+        args=make_args(
+            {
+                "environment": "dev",
+            }
+        )
     )
-    cli = CLI(args=args)
     cli.migrate()
     return cli
 
 
 def test_migrate_shell_file(sort_plan_by_version):
+    logger.info("=== start === test_migrate_shell_file")
     init_workspace()
     make_schema_migration_plan()
     migrate_dev()
@@ -139,6 +149,7 @@ mysql -u$USER -p$MYSQL_PWD -h$HOST -P$PORT -D$SCHEMA \
 
 
 def test_migrate_python_file(sort_plan_by_version):
+    logger.info("=== start === test_migrate_python_file")
     init_workspace()
     make_schema_migration_plan()
     migrate_dev()
@@ -182,6 +193,7 @@ def run(session: Session):
 
 
 def test_migrate_sql_file(sort_plan_by_version):
+    logger.info("=== start === test_migrate_sql_file")
     init_workspace()
 
     # add schema migration plan
@@ -241,6 +253,7 @@ def make_data_migration_plan(forward_sql: str, backward_sql: str):
 
 
 def test_fake_migrate(sort_plan_by_version):
+    logger.info("=== start === test_fake_migrate")
     init_workspace()
 
     make_schema_migration_plan()
@@ -263,6 +276,7 @@ def test_fake_migrate(sort_plan_by_version):
 
 
 def test_fake_rollback(sort_plan_by_version):
+    logger.info("=== start === test_fake_rollback")
     init_workspace()
 
     make_schema_migration_plan()
@@ -294,6 +308,7 @@ def test_fake_rollback(sort_plan_by_version):
 
 
 def test_fix_migration(sort_plan_by_version):
+    logger.info("=== start === test_fix_migration")
     init_workspace()
 
     make_data_migration_plan("insert into testtable", "delete from")
@@ -327,6 +342,7 @@ def test_fix_migration(sort_plan_by_version):
 
 
 def test_integrity_check_for_schema(sort_plan_by_version):
+    logger.info("=== start === test_integrity_check_for_schema")
     init_workspace()
 
     cli = make_schema_migration_plan()
@@ -346,6 +362,7 @@ def test_integrity_check_for_schema(sort_plan_by_version):
 
 
 def test_integrity_check_for_data(sort_plan_by_version):
+    logger.info("=== start === test_integrity_check_for_data")
     init_workspace()
 
     make_schema_migration_plan()
@@ -363,6 +380,7 @@ def test_integrity_check_for_data(sort_plan_by_version):
 
 
 def test_clean_schema_store(sort_plan_by_version):
+    logger.info("=== start === test_clean_schema_store")
     init_workspace()
     make_schema_migration_plan()
     migrate_dev()
@@ -398,7 +416,8 @@ def test_clean_schema_store(sort_plan_by_version):
     )
 
 
-def test_migrate(sort_plan_by_version):
+def test_migrate_happy_flow(sort_plan_by_version):
+    logger.info("=== start === test_migrate_happy_flow")
     # init workspace
     init_workspace()
 
@@ -478,6 +497,109 @@ def test_migrate(sort_plan_by_version):
 
     # check migration history
     dao = cli.dao
-    with dao.session.begin():
-        hists = dao.get_all()
-        assert len(hists) == 4
+    hists = dao.get_all_dto()
+    assert len(hists) == 4
+
+
+def test_repeatable_migration(sort_plan_by_version):
+    logger.info("=== start === test_repeatable_migration")
+
+    def migrate_and_check(len_hists: int, len_row: int):
+        cli = migrate_dev()
+        check(cli, len_hists, len_row)
+
+    def check(cli: CLI, len_hists: int, len_row: int):
+        dao = cli.dao
+        with dao.session.begin():
+            hists = dao.get_all()
+            assert len(hists) == len_hists
+            row = dao.session.execute(text("select name from testtable;")).all()
+            assert len(row) == len_row
+
+    init_workspace()
+
+    # add schema migration plan 0001
+    make_schema_migration_plan("new_test_table", id_primary_key=False)
+
+    # add data migration plan 0002
+    make_data_migration_plan(
+        "insert into testtable (id, name) values (1, 'foo.bar');",
+        "delete from testtable where id = 1;",
+    )
+
+    # add repeatable migration plan R_seed_data
+    cli = CLI(
+        args=make_args(
+            {
+                "name": "seed_data",
+                "type": "sql",
+            }
+        )
+    )
+    cli.make_repeatable_migration()
+    repeat_plan: mp.MigrationPlan = cli.read_migration_plans().get_repeatable_plan(
+        "seed_data"
+    )
+    repeat_plan.change.forward.sql = (
+        "insert into testtable (id, name) values (100, 'foooooo');"
+    )
+    repeat_plan.dependencies = [
+        mp.MigrationSignature(version="0001", name="new_test_table"),
+    ]
+    repeat_plan.save()
+
+    # run migrate, should execute the repeatable migration
+    migrate_and_check(len_hists=4, len_row=2)
+
+    # run migrate again, should execute the repeatable migration again
+    migrate_and_check(len_hists=4, len_row=3)
+
+    # run rollback, should not rollback the repeatable migration
+    # the data migration plan should be rolled back
+    cli = CLI(
+        args=make_args(
+            {
+                "environment": "dev",
+                "version": "0001",
+            }
+        )
+    )
+    cli.rollback()
+    check(cli=cli, len_hists=3, len_row=2)
+
+    # add schema migration plan 0003
+    with open(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, "testtable.sql"), "w"
+    ) as f:
+        f.write(
+            "create table testtable (id int, addr varchar(255), name varchar(255));"
+        )
+    args = make_args({"name": "add_addr_to_test_table"})
+    cli = CLI(args=args)
+    cli.make_schema_migration()
+    # set the repeatable migration plan to ignore after this schema migration plan
+    repeat_plan: mp.MigrationPlan = cli.read_migration_plans().get_repeatable_plan(
+        "seed_data"
+    )
+    repeat_plan.ignore_after = mp.MigrationSignature(
+        version="0003", name="add_addr_to_test_table"
+    )
+    repeat_plan.save()
+
+    # run migrate, should not execute the repeatable migration
+    # len_row = 3 -> two from R_seed_data, one from 0002_insert_test_data
+    migrate_and_check(len_hists=5, len_row=3)
+
+    # check info is working
+    cli = CLI(
+        args=make_args(
+            {
+                "environment": "dev",
+            }
+        )
+    )
+    is_consistent, len_applied, len_unexpected, len_unapplied = cli.info()
+    assert is_consistent
+    assert len_applied == 4  # TODO let info command support repeatable migration
+    assert len_unexpected == 0
+    assert len_unapplied == 0

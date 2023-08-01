@@ -1,5 +1,6 @@
 import datetime
 import enum
+from dataclasses import dataclass
 
 from sqlalchemy import BIGINT, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -31,6 +32,19 @@ class MigrationState(enum.Enum):
 TABLE_ARGS = {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_unicode_ci"}
 
 
+@dataclass
+class MigrationHistoryDTO:
+    ver: str
+    name: str
+    type: str
+    state: MigrationState
+    created: datetime.datetime
+    updated: datetime.datetime
+
+    def can_match(self, ver: str, name: str) -> bool:
+        return self.ver == ver and self.name == name
+
+
 class MigrationHistory(Base):
     __tablename__ = cli_env.TABLE_MIGRATION_HISTORY
     __table_args__ = (
@@ -52,6 +66,16 @@ class MigrationHistory(Base):
 
     def can_match(self, ver: str, name: str) -> bool:
         return self.ver == ver and self.name == name
+
+    def to_dto(self) -> MigrationHistoryDTO:
+        return MigrationHistoryDTO(
+            ver=self.ver,
+            name=self.name,
+            type=self.type,
+            state=self.state,
+            created=self.created,
+            updated=self.updated,
+        )
 
 
 class MigrationHistoryLog(Base):
