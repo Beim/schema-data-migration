@@ -815,7 +815,7 @@ class CLI:
                 [
                     hist.ver,
                     hist.name,
-                    plan.type,
+                    hist.type,
                     hist.state.name,
                     hist.created,
                     hist.updated,
@@ -843,6 +843,7 @@ class CLI:
             [
                 hist.ver,
                 hist.name,
+                hist.type,
                 hist.state.name,
                 hist.created,
                 hist.updated,
@@ -852,7 +853,7 @@ class CLI:
         self._print_info_as_table(
             "Unexpected migration history:",
             output,
-            ["ver", "name", "state", "created", "updated"],
+            ["ver", "name", "type", "state", "created", "updated"],
         )
         len_unexpected = len(output)
 

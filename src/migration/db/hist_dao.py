@@ -29,6 +29,7 @@ class MigrationHistoryDAO:
             ver=plan.version,
             name=plan.name,
             state=model.MigrationState.PROCESSING,
+            type=plan.type,
         )
         self.session.add(hist)
         self.session.flush()

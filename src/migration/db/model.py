@@ -41,6 +41,7 @@ class MigrationHistory(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     ver: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255))
+    type: Mapped[str] = mapped_column(String(255))
     state: Mapped[MigrationState]
     created: Mapped[DateTime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
