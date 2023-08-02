@@ -566,8 +566,7 @@ def test_repeatable_migration(sort_plan_by_version):
 
     # run rollback, should not rollback the repeatable migration
     # the data migration plan should be rolled back
-    # TODO* the repeatable migration plan
-    #       which depends on the rolledback migrations should be rolled back as well
+    # because it's dependency 0001 still exists
     cli = CLI(
         args=make_args(
             {
@@ -617,3 +616,43 @@ def test_repeatable_migration(sort_plan_by_version):
     assert len_unapplied == 0
     _, len_applied = cli.info()
     assert len_applied == 5
+
+    # add newe repeatable migration plan R_seed_addr_data
+    cli = CLI(
+        args=make_args(
+            {
+                "name": "seed_addr_data",
+                "type": "sql",
+            }
+        )
+    )
+    cli.make_repeatable_migration()
+    repeat_plan: mp.MigrationPlan = cli.read_migration_plans().get_repeatable_plan(
+        "seed_addr_data"
+    )
+    repeat_plan.change.forward.sql = (
+        "insert into testtable (id, addr, name) values (200, 'Mars', 'foooooo');"
+    )
+    repeat_plan.change.backward = mp.DataBackward(
+        type="sql", sql="delete from testtable where id = 200;"
+    )
+    repeat_plan.dependencies = [
+        mp.MigrationSignature(version="0003", name="add_addr_to_test_table"),
+    ]
+    repeat_plan.save()
+
+    # run migrate, should execute the repeatable migration
+    migrate_and_check(len_hists=6, len_row=4)
+
+    # run rollback to 0002, should rollback the repeatable migration seed_addr_data
+    # because it depends on the schema migration plan 0003_add_addr_to_test_table
+    cli = CLI(
+        args=make_args(
+            {
+                "environment": "dev",
+                "version": "0002",
+            }
+        )
+    )
+    cli.rollback()
+    check(cli=cli, len_hists=4, len_row=3)

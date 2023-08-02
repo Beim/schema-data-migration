@@ -619,7 +619,11 @@ And add them to the migration plan, now you can migrate!
 
 There're three of migration plans: `schema`, `data` and `repeatable`. 
 - `schema` and `data` migrations are versioned migrations. The applied in order based on their dependencies.
-- `repeatable` migrations have no version. They're (re-)applied every time the checksum changes. Within a single migration run, repeatable migrations are always applied last, after all pending versioned migrations have been executed. The order in which repeatable migrations are applied is not guaranteed. It is your responsibility to ensure the same repeatable migration can be applied multiple times. 
+- `repeatable` migrations have no version. They're (re-)applied every time the checksum changes. 
+    - Within a single migration run, repeatable migrations are always applied last, after all pending versioned migrations have been executed. 
+    - The order in which repeatable migrations are applied is not guaranteed. 
+    - It is your responsibility to ensure the same repeatable migration can be applied multiple times. 
+    - Repeatable migrations will be rolled back if it's dependency has been rolled back.
 
 ## Fake migration and rollback
 
@@ -686,4 +690,5 @@ The first command will show you which files would be deleted without actually de
 ## Future plans
 
 - [ ] Support conditional execution of schema and data migration
+- [ ] Support testing plan
 - [ ] Support database/table sharding

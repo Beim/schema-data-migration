@@ -121,7 +121,7 @@ class CLIMigrator(Migrator):
             sha1 = migration_plan.change.backward.id
             self.move_schema_to(sha1, args)
             return
-        if migration_plan.type == mp.Type.DATA:
+        if migration_plan.type in [mp.Type.DATA, mp.Type.REPEATABLE]:
             if migration_plan.change.backward.type == mp.DataChangeType.SQL:
                 self.migrate_data_sql(migration_plan.change.backward.sql, args)
                 return
@@ -363,10 +363,10 @@ class CLI:
 
     def _migrate_versioned(
         self, ver: str, name: str, fake: bool, dry_run: bool, operator: str = ""
-    ) -> List[mp.MigrationPlan]:
+    ) -> Tuple[List[mp.MigrationPlan], List[mp.MigrationPlan]]:
         """
         Apply versioned migration plans
-        return applied plans
+        return applied plans, to execute plans
         """
         dao = self.build_dao()
         applied_plans: List[mp.MigrationPlan] = []
@@ -379,7 +379,7 @@ class CLI:
 
             # versioned migration has been applied
             if len_applied_versioned == self.mpm.count():
-                return applied_plans
+                return applied_plans, []
             # create new migration history if needed
             next_plan_index = len_applied_versioned
             if ver is None:
@@ -391,12 +391,11 @@ class CLI:
                 )
             if len(new_plans) > 0:
                 if dry_run:
-                    logger.info("migration plans to execute:")
-                    self.print_dry_run(new_plans, is_migrate=True)
-                    return applied_plans
+                    return applied_plans, new_plans
                 dao.add_one(new_plans[0], operator=operator, fake=fake)
                 dao.commit()
 
+        to_execute_plans = new_plans[:]
         while len(new_plans) > 0:
             # migrate operation
             if not fake:
@@ -425,7 +424,7 @@ class CLI:
                     dao.add_one(new_plans[0], operator=operator, fake=fake)
                 dao.commit()
 
-        return applied_plans
+        return applied_plans, to_execute_plans
 
     def migrate(self):
         ver = (
@@ -449,20 +448,29 @@ class CLI:
         )
 
         # versioned migration
-        applied_plans: List[mp.MigrationPlan] = self._migrate_versioned(
+        (applied_plans, to_execute_plans) = self._migrate_versioned(
             ver, name, fake, dry_run, operator=operator
         )
         # repeatable migration
-        self._migrate_repeatable(applied_plans, ver, name, dry_run, operator=operator)
+        to_execute_repeatable_plans = self._migrate_repeatable(
+            applied_plans, ver, name, fake, dry_run, operator=operator
+        )
+
+        if dry_run:
+            logger.info("Migration plans to execute:")
+            self.print_dry_run(
+                to_execute_plans + to_execute_repeatable_plans, is_migrate=True
+            )
 
     def _migrate_repeatable(
         self,
         applied_histories: List[model.MigrationHistory],
         ver: str,
         name: str,
+        fake: bool,
         dry_run: bool,
         operator: str = "",
-    ):
+    ) -> List[mp.MigrationPlan]:
         if dry_run:
             # since it's dry_run, assume the target version is the latest version
             if ver is not None:
@@ -472,15 +480,12 @@ class CLI:
             else:
                 applied_plans = self.mpm.get_plans()
             to_execute_plans = self._get_to_execute_repeatable_plans(applied_plans)
-            if len(to_execute_plans) > 0:
-                logger.info("repeatable migration plans to execute:")
-                self.print_dry_run(to_execute_plans, is_migrate=True)
-            return
+            return to_execute_plans
 
         to_execute_plans = self._get_to_execute_repeatable_plans(applied_histories)
         if len(to_execute_plans) == 0:
             logger.debug("no valid repeatable migration to execute")
-            return
+            return []
 
         dao = self.dao
         for plan in to_execute_plans:
@@ -488,19 +493,22 @@ class CLI:
             with dao.session.begin():
                 hist = dao.get_by_sig(plan.sig())
                 if hist is None:
-                    dao.add_one(plan, operator=operator)
+                    dao.add_one(plan, operator=operator, fake=fake)
                 else:
                     # no need to check if state is SUCCESSFUL,
                     #   because it is repeatable migration
                     # just treat updating PROCESSING to PROCESSING
                     #   as retry the migration
-                    dao.update_processing(plan, operator=operator)
+                    dao.update_processing(plan, operator=operator, fake=fake)
                 dao.commit()
             # execute the migration
-            self.migrator.forward(plan, self.args)
+            if not fake:
+                self.migrator.forward(plan, self.args)
 
             with dao.session.begin():
-                dao.update_succ(plan, operator=operator)
+                dao.update_succ(plan, operator=operator, fake=fake)
+                dao.commit()
+        return to_execute_plans
 
     def _get_to_execute_repeatable_plans(
         self, applied_plans: List[mp.MigrationPlan]
@@ -546,6 +554,36 @@ class CLI:
             to_execute_plans.append(p)
         return to_execute_plans
 
+    def _rollback_repeatable_migration(
+        self,
+        to_rollback_plan: mp.MigrationPlan,
+        inverse_dependencies: Dict[mp.MigrationSignature, List[mp.MigrationSignature]],
+        fake: bool = False,
+        operator: str = "",
+    ):
+        if to_rollback_plan.sig() not in inverse_dependencies:
+            return
+        dao = self.dao
+        for sig in inverse_dependencies[to_rollback_plan.sig()]:
+            plan = self.mpm.must_get_repeatable_plan_by_signature(sig)
+            with dao.session.begin():
+                hist = dao.get_by_sig(sig)
+                if hist is None:
+                    raise Exception(
+                        f"unexpected repeatable migration history, sig={sig}"
+                    )
+                # no need to check if state is SUCCESSFUL,
+                #   because it is repeatable migration
+                dao.update_rollback(plan, operator=operator, fake=fake)
+                dao.commit()
+            # execute the migration
+            if not fake:
+                self.migrator.backward(plan, self.args)
+
+            with dao.session.begin():
+                dao.delete(plan, operator=operator, fake=fake)
+                dao.commit()
+
     def rollback(self):
         self.read_migration_plans()
         self._check_integrity()
@@ -569,32 +607,59 @@ class CLI:
             elif target_migration_plan_index == latest_migration_plan_index:
                 return
 
-            to_rollback_cfgs = self.mpm.must_get_plan_between(
+            to_rollback_versioned_plans = self.mpm.must_get_plan_between(
                 target_migration_plan_index + 1, latest_migration_plan_index
             )
 
-            if len(to_rollback_cfgs) > 0:
+            # get repeatable migration plans to rollback
+            to_rollback_plans_dry_run_print: List[mp.MigrationPlan] = []
+            inverse_dependencies = self.mpm.get_repeatable_plan_inverse_dependencies()
+            for trp in to_rollback_versioned_plans:
+                to_rollback_plans_dry_run_print.append(trp)
+                if trp.sig() in inverse_dependencies:
+                    # check if the repeatable migration has been applied
+                    if dao.get_by_sig(trp.sig()) is not None:
+                        for sig in inverse_dependencies[trp.sig()]:
+                            to_rollback_plans_dry_run_print.append(
+                                self.mpm.must_get_repeatable_plan_by_signature(sig)
+                            )
+
+            if len(to_rollback_versioned_plans) > 0:
                 if dry_run:
-                    logger.info("migration plans to rollback:")
-                    self.print_dry_run(to_rollback_cfgs, is_migrate=False)
+                    logger.info("Migration plans to rollback:")
+                    self.print_dry_run(
+                        to_rollback_plans_dry_run_print,
+                        is_migrate=False,
+                    )
                     return
 
-                dao.update_rollback(to_rollback_cfgs[-1], operator=operator, fake=fake)
+                dao.update_rollback(
+                    to_rollback_versioned_plans[-1], operator=operator, fake=fake
+                )
                 dao.commit()
 
-        while len(to_rollback_cfgs) > 0:
+        while len(to_rollback_versioned_plans) > 0:
+            # before rollback versioned migration
+            # check if repeatable migration which dependents on it should be rollbacked
+            self._rollback_repeatable_migration(
+                to_rollback_versioned_plans[-1],
+                inverse_dependencies,
+                fake=fake,
+                operator=operator,
+            )
+
             # rollback operation
             if not fake:
-                self.migrator.backward(to_rollback_cfgs[-1], self.args)
+                self.migrator.backward(to_rollback_versioned_plans[-1], self.args)
 
             with dao.session.begin():
                 latest_hist = dao.get_latest_versioned()
                 if latest_hist is None:
                     raise Exception("unexpected migration history, latest_hist is None")
                 if not latest_hist.can_match(
-                    to_rollback_cfgs[-1].version,
-                    to_rollback_cfgs[-1].name,
-                    to_rollback_cfgs[-1].get_checksum(),
+                    to_rollback_versioned_plans[-1].version,
+                    to_rollback_versioned_plans[-1].name,
+                    to_rollback_versioned_plans[-1].get_checksum(),
                 ):
                     raise Exception(
                         f"unexpected migration history, ver={latest_hist.ver},"
@@ -605,11 +670,13 @@ class CLI:
                         f"unexpected migration history state, ver={latest_hist.ver},"
                         f" name={latest_hist.name}, state={latest_hist.state}"
                     )
-                dao.delete(to_rollback_cfgs[-1], operator=operator, fake=fake)
-                to_rollback_cfgs = to_rollback_cfgs[:-1]
-                if len(to_rollback_cfgs) > 0:
+                dao.delete(
+                    to_rollback_versioned_plans[-1], operator=operator, fake=fake
+                )
+                to_rollback_versioned_plans = to_rollback_versioned_plans[:-1]
+                if len(to_rollback_versioned_plans) > 0:
                     dao.update_rollback(
-                        to_rollback_cfgs[-1], operator=operator, fake=fake
+                        to_rollback_versioned_plans[-1], operator=operator, fake=fake
                     )
                 dao.commit()
 
@@ -969,7 +1036,7 @@ class CLI:
             for hist in hist_list
         ]
         self._print_info_as_table(
-            "Applied migration history:",
+            "Migration history:",
             output,
             ["ver", "name", "type", "state", "created", "updated"],
         )

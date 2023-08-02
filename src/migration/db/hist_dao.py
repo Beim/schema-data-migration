@@ -49,12 +49,15 @@ class MigrationHistoryDAO:
         )
         self.session.add(log)
 
-    def update_processing(self, plan: mp.MigrationPlan, operator: str = "") -> None:
+    def update_processing(
+        self, plan: mp.MigrationPlan, operator: str = "", fake: bool = False
+    ) -> None:
         self._update(
             plan,
             model.MigrationState.PROCESSING,
             Operation.UPDATE_PROCESSING,
             operator=operator,
+            fake=fake,
         )
 
     def update_succ(

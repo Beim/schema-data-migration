@@ -225,12 +225,9 @@ class MigrationPlan:
         return json.dumps(self.to_dict(), indent=4)
 
     def to_dict_for_log(self):
-        return {
-            "version": self.version,
-            "name": self.name,
-            "type": str(self.type),
-            "checksum": self.get_checksum(),
-        }
+        obj = self.to_dict()
+        obj["checksum"] = self.get_checksum()
+        return obj
 
     def save(self) -> str:
         match self.type:
@@ -287,12 +284,8 @@ _sort_migration_plans_by = _default_sort_migration_plans_by
 
 
 class MigrationPlanManager:
-    def __init__(self, plans: Optional[List[MigrationPlan]] = None):
-        if plans is None:
-            self.plans, self.repeatable_plans = self._read_migration_plans()
-        else:
-            self.plans = plans  # TODO remove this because it is not used
-            self.repeatable_plans = None
+    def __init__(self):
+        self.plans, self.repeatable_plans = self._read_migration_plans()
 
     def _read_migration_plans(self) -> Tuple[List[MigrationPlan], List[MigrationPlan]]:
         plans = []
@@ -381,6 +374,25 @@ class MigrationPlanManager:
 
     def get_repeatable_plans(self) -> List[MigrationPlan]:
         return self.repeatable_plans
+
+    def get_repeatable_plan_inverse_dependencies(
+        self,
+    ) -> Dict[MigrationSignature, List[MigrationSignature]]:
+        inverse_dependencies = {}
+        for plan in self.repeatable_plans:
+            for dependency in plan.dependencies:
+                if dependency not in inverse_dependencies:
+                    inverse_dependencies[dependency] = []
+                inverse_dependencies[dependency].append(plan.sig())
+        return inverse_dependencies
+
+    def must_get_repeatable_plan_by_signature(
+        self, sig: MigrationSignature
+    ) -> MigrationPlan:
+        for plan in self.repeatable_plans:
+            if plan.match(sig):
+                return plan
+        raise Exception(f"Cannot find repeatable plan for {sig}")
 
     def get_repeatable_plan(self, name: str) -> MigrationPlan:
         for plan in self.repeatable_plans:
