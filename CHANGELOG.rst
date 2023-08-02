@@ -37,3 +37,9 @@ Version 0.2.0
 - Log --fake flag in _migration_history_log table
 - Fix: `info` command print unxpected migration history instead of throw error
 - Fix: Add .gitkeep to directories in .schema_store to make sure they are tracked by git 
+
+Version 0.3.0
+=============
+
+- Add `make-repeatable` command to generate repeatable migration
+- Add `checksum` and `type` to migration history table
