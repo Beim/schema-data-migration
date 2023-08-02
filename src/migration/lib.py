@@ -1,6 +1,5 @@
 import collections
 import configparser
-import hashlib
 import importlib.util
 import logging
 import os
@@ -15,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from tabulate import tabulate
 
-from . import err
+from . import err, helper
 from . import migration_plan as mp
 from .db import hist_dao, model
 from .db.db import make_session
@@ -296,7 +295,7 @@ class CLI:
                     f"migration is not successful, ver={hist.ver}, name={hist.name}"
                 )
             plan = self.mpm.get_plan_by_index(idx)
-            if not hist.can_match(plan.version, plan.name):
+            if not hist.can_match(plan.version, plan.name, plan.get_checksum()):
                 raise Exception(
                     f"unexpected migration history, ver={hist.ver}, name={hist.name}"
                 )
@@ -416,7 +415,9 @@ class CLI:
                 latest_hist = dao.get_latest_versioned()
                 if latest_hist is None:
                     raise Exception("unexpected migration history, latest_hist is None")
-                if not latest_hist.can_match(new_plans[0].version, new_plans[0].name):
+                if not latest_hist.can_match(
+                    new_plans[0].version, new_plans[0].name, new_plans[0].get_checksum()
+                ):
                     raise Exception(
                         f"unexpected migration history, ver={latest_hist.ver},"
                         f" name={latest_hist.name}"
@@ -589,7 +590,9 @@ class CLI:
                 if latest_hist is None:
                     raise Exception("unexpected migration history, latest_hist is None")
                 if not latest_hist.can_match(
-                    to_rollback_cfgs[-1].version, to_rollback_cfgs[-1].name
+                    to_rollback_cfgs[-1].version,
+                    to_rollback_cfgs[-1].name,
+                    to_rollback_cfgs[-1].get_checksum(),
                 ):
                     raise Exception(
                         f"unexpected migration history, ver={latest_hist.ver},"
@@ -923,14 +926,7 @@ class CLI:
             f.write(content)
 
     def sha1_encode(self, str_list: List[str]):
-        # create a SHA1 hash object
-        sha1 = hashlib.sha1()
-        # update the hash object with the string
-        for s in str_list:
-            sha1.update(s.encode())
-        # get the hexadecimal representation of the hash
-        hex_digest = sha1.hexdigest()
-        return hex_digest
+        return helper.sha1_encode(str_list=str_list)
 
     def skeema(self, raw_args: List[str], cwd: str = cli_env.MIGRATION_CWD):
         # https://stackoverflow.com/questions/39872088/executing-interactive-shell-script-in-python

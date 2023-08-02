@@ -12,6 +12,8 @@ import networkx as nx
 from migration import err
 from migration.env import cli_env
 
+from . import helper
+
 logger = logging.getLogger(__name__)
 
 
@@ -168,6 +170,8 @@ class MigrationPlan:
     dependencies: List[MigrationSignature]
     ignore_after: Optional[MigrationSignature | None] = None
 
+    _checksum: Optional[str | None] = None  # the value is not saved to file
+
     def __str__(self) -> str:
         return f"MigrationPlan({self.version}_{self.name})"
 
@@ -184,6 +188,56 @@ class MigrationPlan:
             obj["ignore_after"] = self.ignore_after.to_dict()
         return obj
 
+    def get_checksum(self) -> str:
+        if self._checksum is not None:
+            return self._checksum
+        sha1 = helper.SHA1Helper()
+        sha1.update_str([self.version, self.name])
+        forward = self.change.forward
+        backward = self.change.backward
+        match self.type:
+            case Type.SCHEMA:
+                sha1.update_str([forward.id])
+                if backward is not None:
+                    sha1.update_str([backward.id])
+            case Type.DATA | Type.REPEATABLE:
+                data_dir = os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR)
+                match forward.type:
+                    case DataChangeType.SQL:
+                        sha1.update_str([forward.sql])
+                    case DataChangeType.SQL_FILE:
+                        sha1.update_file([os.path.join(data_dir, forward.sql_file)])
+                    case DataChangeType.PYTHON:
+                        sha1.update_file([os.path.join(data_dir, forward.python_file)])
+                    case DataChangeType.SHELL:
+                        sha1.update_file([os.path.join(data_dir, forward.shell_file)])
+                    case DataChangeType.TYPESCRIPT:
+                        sha1.update_file(
+                            [os.path.join(data_dir, forward.typescript_file)]
+                        )
+                if backward is not None:
+                    match backward.type:
+                        case DataChangeType.SQL:
+                            sha1.update_str([backward.sql])
+                        case DataChangeType.SQL_FILE:
+                            sha1.update_file(
+                                [os.path.join(data_dir, backward.sql_file)]
+                            )
+                        case DataChangeType.PYTHON:
+                            sha1.update_file(
+                                [os.path.join(data_dir, backward.python_file)]
+                            )
+                        case DataChangeType.SHELL:
+                            sha1.update_file(
+                                [os.path.join(data_dir, backward.shell_file)]
+                            )
+                        case DataChangeType.TYPESCRIPT:
+                            sha1.update_file(
+                                [os.path.join(data_dir, backward.typescript_file)]
+                            )
+        self._checksum = sha1.hexdigest()
+        return self._checksum
+
     def to_json_str(self):
         return json.dumps(self.to_dict(), indent=4)
 
@@ -192,6 +246,7 @@ class MigrationPlan:
             "version": self.version,
             "name": self.name,
             "type": str(self.type),
+            "checksum": self.get_checksum(),
         }
 
     def save(self) -> str:

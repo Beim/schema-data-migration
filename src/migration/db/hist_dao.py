@@ -36,6 +36,7 @@ class MigrationHistoryDAO:
             name=plan.name,
             state=model.MigrationState.PROCESSING,
             type=plan.type,
+            checksum=plan.get_checksum(),
         )
         self.session.add(hist)
         self.session.flush()
@@ -101,8 +102,9 @@ class MigrationHistoryDAO:
             )
             .with_for_update()
         )
-        hist = self.session.scalars(stmt).one()
+        hist: model.MigrationHistory = self.session.scalars(stmt).one()
         hist.state = state
+        hist.checksum = plan.get_checksum()
         # add log
         log = model.MigrationHistoryLog(
             hist_id=hist.id,

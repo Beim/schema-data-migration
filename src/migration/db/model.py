@@ -63,9 +63,10 @@ class MigrationHistory(Base):
     updated: Mapped[DateTime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
     )
+    checksum: Mapped[str] = mapped_column(String(255), default="")
 
-    def can_match(self, ver: str, name: str) -> bool:
-        return self.ver == ver and self.name == name
+    def can_match(self, ver: str, name: str, checksum: str) -> bool:
+        return self.ver == ver and self.name == name and self.checksum == checksum
 
     def to_dto(self) -> MigrationHistoryDTO:
         return MigrationHistoryDTO(
