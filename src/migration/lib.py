@@ -94,48 +94,53 @@ class Migrator:
 class CLIMigrator(Migrator):
     def forward(self, migration_plan: mp.MigrationPlan, args: Namespace):
         logger.info(f"Executing {migration_plan}")
+        forward = migration_plan.change.forward
         if migration_plan.type == mp.Type.SCHEMA:
-            sha1 = migration_plan.change.forward.id
+            sha1 = forward.id
             self.move_schema_to(sha1, args)
             return
         if migration_plan.type in [mp.Type.DATA, mp.Type.REPEATABLE]:
-            if migration_plan.change.forward.type == mp.DataChangeType.SQL:
-                self.migrate_data_sql(migration_plan.change.forward.sql, args)
+            if forward.type == mp.DataChangeType.SQL:
+                self.migrate_data_sql(forward.sql, args)
                 return
-            if migration_plan.change.forward.type == mp.DataChangeType.SQL_FILE:
-                self.migrate_data_sql_file(migration_plan.change.forward.file, args)
+            if forward.type == mp.DataChangeType.SQL_FILE:
+                self.migrate_data_sql_file(forward.file, args)
                 return
-            if migration_plan.change.forward.type == mp.DataChangeType.PYTHON:
-                self.migrate_data_python(migration_plan.change.forward.file, args)
+            if forward.type == mp.DataChangeType.PYTHON:
+                self.migrate_data_python(forward.file, args)
                 return
-            if migration_plan.change.forward.type == mp.DataChangeType.SHELL:
-                self.migrate_data_shell(migration_plan.change.forward.file, args)
+            if forward.type == mp.DataChangeType.SHELL:
+                self.migrate_data_shell(forward.file, args)
                 return
-            if migration_plan.change.forward.type == mp.DataChangeType.TYPESCRIPT:
-                self.migrate_data_typescript(migration_plan.change.forward.file, args)
+            if forward.type == mp.DataChangeType.TYPESCRIPT:
+                self.migrate_data_typescript(forward.file, args)
                 return
 
     def backward(self, migration_plan: mp.MigrationPlan, args: Namespace):
         logger.info(f"Rollbacking {migration_plan}")
+        backward = migration_plan.change.backward
+        if backward is None:
+            logger.info(f"no backward change for {migration_plan}")
+            return
         if migration_plan.type == mp.Type.SCHEMA:
-            sha1 = migration_plan.change.backward.id
+            sha1 = backward.id
             self.move_schema_to(sha1, args)
             return
         if migration_plan.type in [mp.Type.DATA, mp.Type.REPEATABLE]:
-            if migration_plan.change.backward.type == mp.DataChangeType.SQL:
-                self.migrate_data_sql(migration_plan.change.backward.sql, args)
+            if backward.type == mp.DataChangeType.SQL:
+                self.migrate_data_sql(backward.sql, args)
                 return
-            if migration_plan.change.backward.type == mp.DataChangeType.SQL_FILE:
-                self.migrate_data_sql_file(migration_plan.change.backward.file, args)
+            if backward.type == mp.DataChangeType.SQL_FILE:
+                self.migrate_data_sql_file(backward.file, args)
                 return
-            if migration_plan.change.backward.type == mp.DataChangeType.PYTHON:
-                self.migrate_data_python(migration_plan.change.backward.file, args)
+            if backward.type == mp.DataChangeType.PYTHON:
+                self.migrate_data_python(backward.file, args)
                 return
-            if migration_plan.change.backward.type == mp.DataChangeType.SHELL:
-                self.migrate_data_shell(migration_plan.change.backward.file, args)
+            if backward.type == mp.DataChangeType.SHELL:
+                self.migrate_data_shell(backward.file, args)
                 return
-            if migration_plan.change.backward.type == mp.DataChangeType.TYPESCRIPT:
-                self.migrate_data_typescript(migration_plan.change.backward.file, args)
+            if backward.type == mp.DataChangeType.TYPESCRIPT:
+                self.migrate_data_typescript(backward.file, args)
                 return
 
     def migrate_data_shell(self, shell_file: str, args: Namespace):
@@ -543,7 +548,12 @@ class CLI:
                     continue
 
             hist_dto = self.dao.get_by_sig_dto(p.sig())
-            if hist_dto is not None and hist_dto.checksum == p.get_checksum():
+            if (
+                hist_dto is not None
+                and hist_dto.checksum == p.get_checksum()
+                and hist_dto.state
+                == model.MigrationState.SUCCESSFUL  # if it's not successful, retry
+            ):
                 logger.debug(
                     "repeatable migration %s is not executed because it has been"
                     " executed",
@@ -569,9 +579,8 @@ class CLI:
             with dao.session.begin():
                 hist = dao.get_by_sig(sig)
                 if hist is None:
-                    raise Exception(
-                        f"unexpected repeatable migration history, sig={sig}"
-                    )
+                    logger.debug(f"Migration history not found, so skip rollback {sig}")
+                    continue
                 # no need to check if state is SUCCESSFUL,
                 #   because it is repeatable migration
                 dao.update_rollback(plan, operator=operator, fake=fake)
