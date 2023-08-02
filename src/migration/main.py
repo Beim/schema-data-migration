@@ -450,7 +450,7 @@ def main(raw_args):
         case Command.MAKE_REPEATABLE | Command.ALIAS_MAKE_REPEATABLE:
             cli.make_repeatable_migration()
         case Command.INFO:
-            is_consistent, _, _, _ = cli.info()
+            is_consistent, _ = cli.info()
             if not is_consistent:
                 raise Exception(
                     "Migration history is not consistent with migration plans"

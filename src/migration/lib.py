@@ -949,7 +949,35 @@ class CLI:
             )
         )
 
-    def info(self) -> Tuple[bool, int, int, int]:
+    def info(self) -> Tuple[bool, int]:
+        """
+        return (is_migration_history_consistent, len_applied)
+        """
+        self.read_migration_plans()
+        dao = self.build_dao()
+        hist_list = dao.get_all_dto()
+
+        output = [
+            [
+                hist.ver,
+                hist.name,
+                hist.type,
+                hist.state.name,
+                hist.created,
+                hist.updated,
+            ]
+            for hist in hist_list
+        ]
+        self._print_info_as_table(
+            "Applied migration history:",
+            output,
+            ["ver", "name", "type", "state", "created", "updated"],
+        )
+
+        return True, len(hist_list)
+
+    # TODO get verbose info
+    def versioned_info(self) -> Tuple[bool, int, int, int]:
         self.read_migration_plans()
         dao = self.build_dao()
         hist_list = dao.get_all_versioned_dto()
