@@ -40,9 +40,10 @@ class MigrationHistoryDTO:
     state: MigrationState
     created: datetime.datetime
     updated: datetime.datetime
+    checksum: str
 
-    def can_match(self, ver: str, name: str) -> bool:
-        return self.ver == ver and self.name == name
+    def can_match(self, ver: str, name: str, checksum: str) -> bool:
+        return self.ver == ver and self.name == name and self.checksum == checksum
 
 
 class MigrationHistory(Base):
@@ -76,6 +77,7 @@ class MigrationHistory(Base):
             state=self.state,
             created=self.created,
             updated=self.updated,
+            checksum=self.checksum,
         )
 
 

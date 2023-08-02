@@ -551,11 +551,23 @@ def test_repeatable_migration(sort_plan_by_version):
     # run migrate, should execute the repeatable migration
     migrate_and_check(len_hists=4, len_row=2)
 
-    # run migrate again, should execute the repeatable migration again
+    # run migrate again, should not execute the repeatable migration again
+    #   because the checksum is the same
+    migrate_and_check(len_hists=4, len_row=2)
+
+    repeat_plan.change.forward.sql = (
+        "insert into testtable (id, name) values (100, 'barrrrrrrrr');"
+    )
+    repeat_plan.save()
+
+    # run migrate, should execute the repeatable migration
+    #   because the checksum is different
     migrate_and_check(len_hists=4, len_row=3)
 
     # run rollback, should not rollback the repeatable migration
     # the data migration plan should be rolled back
+    # TODO* the repeatable migration plan
+    #       which depends on the rolledback migrations should be rolled back as well
     cli = CLI(
         args=make_args(
             {
@@ -567,7 +579,7 @@ def test_repeatable_migration(sort_plan_by_version):
     cli.rollback()
     check(cli=cli, len_hists=3, len_row=2)
 
-    # add schema migration plan 0003
+    # add schema migration plan 0003 which alter the table
     with open(
         os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, "testtable.sql"), "w"
     ) as f:
@@ -586,7 +598,7 @@ def test_repeatable_migration(sort_plan_by_version):
     )
     repeat_plan.save()
 
-    # run migrate, should not execute the repeatable migration
+    # run migrate, should not execute the repeatable migration because it's ignored
     # len_row = 3 -> two from R_seed_data, one from 0002_insert_test_data
     migrate_and_check(len_hists=5, len_row=3)
 

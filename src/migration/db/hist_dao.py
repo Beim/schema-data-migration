@@ -205,6 +205,21 @@ class MigrationHistoryDAO:
             .one_or_none()
         )
 
+    def get_by_sig_dto(
+        self, sig: mp.MigrationSignature
+    ) -> Optional[model.MigrationHistoryDTO]:
+        hist: model.MigrationHistory = (
+            self.session.query(model.MigrationHistory)
+            .filter(
+                model.MigrationHistory.ver == sig.version,
+                model.MigrationHistory.name == sig.name,
+            )
+            .one_or_none()
+        )
+        hist_dto = hist.to_dto() if hist is not None else None
+        self.commit()
+        return hist_dto
+
     def clear_all(self) -> None:
         self.session.query(model.MigrationHistory).delete()
 

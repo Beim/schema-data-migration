@@ -521,6 +521,7 @@ class CLI:
                         dep_sig,
                     )
                     continue
+
             if p.ignore_after is not None:
                 ignore_sig = p.ignore_after
                 # check if ignore_sig is in applied_histories
@@ -532,6 +533,16 @@ class CLI:
                         ignore_sig,
                     )
                     continue
+
+            hist_dto = self.dao.get_by_sig_dto(p.sig())
+            if hist_dto is not None and hist_dto.checksum == p.get_checksum():
+                logger.debug(
+                    "repeatable migration %s is not executed because it has been"
+                    " executed",
+                    p,
+                )
+                continue
+
             to_execute_plans.append(p)
         return to_execute_plans
 
@@ -949,7 +960,7 @@ class CLI:
         for idx in range(min_len):
             hist = hist_list[idx]
             plan = self.mpm.get_plan_by_index(idx)
-            if not hist.can_match(plan.version, plan.name):
+            if not hist.can_match(plan.version, plan.name, plan.get_checksum()):
                 is_migration_history_consistent = False
                 break
             output.append(
