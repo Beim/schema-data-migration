@@ -1,4 +1,3 @@
-import dataclasses
 import json
 import logging
 import os
@@ -16,11 +15,11 @@ from migration.env import cli_env
 logger = logging.getLogger(__name__)
 
 
-class EnhancedJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if dataclasses.is_dataclass(o):
-            return dataclasses.asdict(o)
-        return super().default(o)
+# class EnhancedJSONEncoder(json.JSONEncoder):
+#     def default(self, o):
+#         if dataclasses.is_dataclass(o):
+#             return dataclasses.asdict(o)
+#         return super().default(o)
 
 
 class Type(StrEnum):
@@ -57,15 +56,37 @@ class SchemaForward:
     def to_str_for_print(self) -> str:
         return self.id
 
+    def to_dict(self) -> Dict:
+        return {
+            "id": self.id,
+        }
+
 
 @dataclass
 class DataForward:
-    type: Optional[str | None] = None  # DataChangeType
+    type: str  # DataChangeType
     sql: Optional[str | None] = None
     sql_file: Optional[str | None] = None
     python_file: Optional[str | None] = None
     shell_file: Optional[str | None] = None
     typescript_file: Optional[str | None] = None
+
+    def to_dict(self) -> Dict:
+        obj = {
+            "type": self.type,
+        }
+        match self.type:
+            case DataChangeType.SQL:
+                obj["sql"] = self.sql
+            case DataChangeType.SQL_FILE:
+                obj["sql_file"] = self.sql_file
+            case DataChangeType.PYTHON:
+                obj["python_file"] = self.python_file
+            case DataChangeType.SHELL:
+                obj["shell_file"] = self.shell_file
+            case DataChangeType.TYPESCRIPT:
+                obj["typescript_file"] = self.typescript_file
+        return obj
 
     def to_str_for_print(self) -> str:
         if self.type == DataChangeType.SQL:
@@ -99,6 +120,14 @@ class Change:
     forward: Optional[SchemaForward | DataForward]
     backward: Optional[SchemaBackward | DataBackward | None]
 
+    def to_dict(self):
+        obj = {
+            "forward": self.forward.to_dict(),
+        }
+        if self.backward is not None:
+            obj["backward"] = self.backward.to_dict()
+        return obj
+
 
 @dataclass
 class MigrationSignature:
@@ -115,6 +144,14 @@ class MigrationSignature:
 
     def __str__(self) -> str:
         return f"{self.version}_{self.name}"
+
+    def to_dict(self) -> Dict:
+        obj = {
+            "version": self.version,
+        }
+        if self.name is not None:
+            obj["name"] = self.name
+        return obj
 
 
 InitialMigrationSignature = MigrationSignature(version="0000", name="init")
@@ -134,8 +171,21 @@ class MigrationPlan:
     def __str__(self) -> str:
         return f"MigrationPlan({self.version}_{self.name})"
 
+    def to_dict(self) -> Dict:
+        obj = {
+            "version": self.version,
+            "name": self.name,
+            "author": self.author,
+            "type": str(self.type),
+            "change": self.change.to_dict(),
+            "dependencies": [d.to_dict() for d in self.dependencies],
+        }
+        if self.ignore_after is not None:
+            obj["ignore_after"] = self.ignore_after.to_dict()
+        return obj
+
     def to_json_str(self):
-        return json.dumps(self, cls=EnhancedJSONEncoder, indent=4)
+        return json.dumps(self.to_dict(), indent=4)
 
     def to_dict_for_log(self):
         return {
