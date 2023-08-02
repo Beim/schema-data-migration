@@ -103,20 +103,16 @@ class CLIMigrator(Migrator):
                 self.migrate_data_sql(migration_plan.change.forward.sql, args)
                 return
             if migration_plan.change.forward.type == mp.DataChangeType.SQL_FILE:
-                self.migrate_data_sql_file(migration_plan.change.forward.sql_file, args)
+                self.migrate_data_sql_file(migration_plan.change.forward.file, args)
                 return
             if migration_plan.change.forward.type == mp.DataChangeType.PYTHON:
-                self.migrate_data_python(
-                    migration_plan.change.forward.python_file, args
-                )
+                self.migrate_data_python(migration_plan.change.forward.file, args)
                 return
             if migration_plan.change.forward.type == mp.DataChangeType.SHELL:
-                self.migrate_data_shell(migration_plan.change.forward.shell_file, args)
+                self.migrate_data_shell(migration_plan.change.forward.file, args)
                 return
             if migration_plan.change.forward.type == mp.DataChangeType.TYPESCRIPT:
-                self.migrate_data_typescript(
-                    migration_plan.change.forward.typescript_file, args
-                )
+                self.migrate_data_typescript(migration_plan.change.forward.file, args)
                 return
 
     def backward(self, migration_plan: mp.MigrationPlan, args: Namespace):
@@ -130,22 +126,16 @@ class CLIMigrator(Migrator):
                 self.migrate_data_sql(migration_plan.change.backward.sql, args)
                 return
             if migration_plan.change.backward.type == mp.DataChangeType.SQL_FILE:
-                self.migrate_data_sql_file(
-                    migration_plan.change.backward.sql_file, args
-                )
+                self.migrate_data_sql_file(migration_plan.change.backward.file, args)
                 return
             if migration_plan.change.backward.type == mp.DataChangeType.PYTHON:
-                self.migrate_data_python(
-                    migration_plan.change.backward.python_file, args
-                )
+                self.migrate_data_python(migration_plan.change.backward.file, args)
                 return
             if migration_plan.change.backward.type == mp.DataChangeType.SHELL:
-                self.migrate_data_shell(migration_plan.change.backward.shell_file, args)
+                self.migrate_data_shell(migration_plan.change.backward.file, args)
                 return
             if migration_plan.change.backward.type == mp.DataChangeType.TYPESCRIPT:
-                self.migrate_data_typescript(
-                    migration_plan.change.backward.typescript_file, args
-                )
+                self.migrate_data_typescript(migration_plan.change.backward.file, args)
                 return
 
     def migrate_data_shell(self, shell_file: str, args: Namespace):
@@ -818,15 +808,15 @@ class CLI:
                     " DUPLICATE KEY UPDATE `name` = 'foo.bar';"
                 )
             case mp.DataChangeType.SQL_FILE:
-                next_plan.change.forward.sql_file = "your_sql_file.sql"
+                next_plan.change.forward.file = "your_sql_file.sql"
             case mp.DataChangeType.PYTHON:
-                next_plan.change.forward.python_file = "your_python_file.py"
+                next_plan.change.forward.file = "your_python_file.py"
                 logger.info("Sample python file:\n%s", cli_env.SAMPLE_PYTHON_FILE)
             case mp.DataChangeType.SHELL:
-                next_plan.change.forward.shell_file = "your_shell_file.sh"
+                next_plan.change.forward.file = "your_shell_file.sh"
                 logger.info("Sample shell file:\n%s", cli_env.SAMPLE_SHELL_FILE)
             case mp.DataChangeType.TYPESCRIPT:
-                next_plan.change.forward.typescript_file = "your_typescript_file.ts"
+                next_plan.change.forward.file = "your_typescript_file.ts"
                 logger.info("Sample typescript file:\n%s", cli_env.SAMPLE_MIGRATION_TS)
 
         return next_plan.save()
@@ -863,15 +853,15 @@ class CLI:
                     "INSERT INTO `testtable` (`id`, `name`) VALUES (1, 'foo.bar');"
                 )
             case mp.DataChangeType.SQL_FILE:
-                next_plan.change.forward.sql_file = "your_sql_file.sql"
+                next_plan.change.forward.file = "your_sql_file.sql"
             case mp.DataChangeType.PYTHON:
-                next_plan.change.forward.python_file = "your_python_file.py"
+                next_plan.change.forward.file = "your_python_file.py"
                 logger.info("Sample python file:\n%s", cli_env.SAMPLE_PYTHON_FILE)
             case mp.DataChangeType.SHELL:
-                next_plan.change.forward.shell_file = "your_shell_file.sh"
+                next_plan.change.forward.file = "your_shell_file.sh"
                 logger.info("Sample shell file:\n%s", cli_env.SAMPLE_SHELL_FILE)
             case mp.DataChangeType.TYPESCRIPT:
-                next_plan.change.forward.typescript_file = "your_typescript_file.ts"
+                next_plan.change.forward.file = "your_typescript_file.ts"
                 logger.info("Sample typescript file:\n%s", cli_env.SAMPLE_MIGRATION_TS)
 
         return next_plan.save()
@@ -1368,17 +1358,13 @@ class CLI:
                 if change.sql is None or change.sql == "":
                     raise err.IntegrityError(f"sql is empty, {plan}")
 
-            if change.type == mp.DataChangeType.SQL_FILE:
-                check_data_file(change.sql_file)
-
-            if change.type == mp.DataChangeType.PYTHON:
-                check_data_file(change.python_file)
-
-            if change.type == mp.DataChangeType.SHELL:
-                check_data_file(change.shell_file)
-
-            if change.type == mp.DataChangeType.TYPESCRIPT:
-                check_data_file(change.typescript_file)
+            if (
+                change.type == mp.DataChangeType.SQL_FILE
+                or change.type == mp.DataChangeType.PYTHON
+                or change.type == mp.DataChangeType.SHELL
+                or change.type == mp.DataChangeType.TYPESCRIPT
+            ):
+                check_data_file(change.file)
 
         check_forward_or_backward(plan.change.forward)
 

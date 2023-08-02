@@ -130,7 +130,7 @@ mysql -u$USER -p$MYSQL_PWD -h$HOST -P$PORT -D$SCHEMA \
     cli = CLI(args=args)
     cli.make_data_migration()
     data_plan = cli.read_migration_plans().get_plan_by_index(-1)
-    data_plan.change.forward.shell_file = "insert.sh"
+    data_plan.change.forward.file = "insert.sh"
     data_plan.change.backward = mp.DataBackward(
         type="sql",
         sql="delete from testtable where id = 1;",
@@ -174,7 +174,7 @@ def run(session: Session):
     cli = CLI(args=args)
     cli.make_data_migration()
     data_plan = cli.read_migration_plans().get_plan_by_index(-1)
-    data_plan.change.forward.python_file = "insert.py"
+    data_plan.change.forward.file = "insert.py"
     data_plan.change.backward = mp.DataBackward(
         type="sql",
         sql="delete from testtable where id = 1;",
@@ -214,7 +214,7 @@ def test_migrate_sql_file(sort_plan_by_version):
     ) as f:
         f.write("insert into testtable (id, name) values (1, 'foo.bar');")
     data_plan = cli.read_migration_plans().get_plan_by_index(-1)
-    data_plan.change.forward.sql_file = "insert_test_data.sql"
+    data_plan.change.forward.file = "insert_test_data.sql"
     data_plan.change.backward = mp.DataBackward(
         type="sql",
         sql="delete from testtable where id = 1;",

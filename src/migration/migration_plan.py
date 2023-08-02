@@ -68,10 +68,7 @@ class SchemaForward:
 class DataForward:
     type: str  # DataChangeType
     sql: Optional[str | None] = None
-    sql_file: Optional[str | None] = None
-    python_file: Optional[str | None] = None
-    shell_file: Optional[str | None] = None
-    typescript_file: Optional[str | None] = None
+    file: Optional[str | None] = None
 
     def to_dict(self) -> Dict:
         obj = {
@@ -80,14 +77,13 @@ class DataForward:
         match self.type:
             case DataChangeType.SQL:
                 obj["sql"] = self.sql
-            case DataChangeType.SQL_FILE:
-                obj["sql_file"] = self.sql_file
-            case DataChangeType.PYTHON:
-                obj["python_file"] = self.python_file
-            case DataChangeType.SHELL:
-                obj["shell_file"] = self.shell_file
-            case DataChangeType.TYPESCRIPT:
-                obj["typescript_file"] = self.typescript_file
+            case (
+                DataChangeType.SQL_FILE
+                | DataChangeType.PYTHON
+                | DataChangeType.SHELL
+                | DataChangeType.TYPESCRIPT
+            ):
+                obj["file"] = self.file
         return obj
 
     def to_str_for_print(self) -> str:
@@ -95,14 +91,13 @@ class DataForward:
             if len(self.sql) <= 40:  # to match the length if index sha1
                 return self.sql
             return self.sql[:37] + "..."
-        elif self.type == DataChangeType.SQL_FILE:
-            return self.sql_file
-        elif self.type == DataChangeType.PYTHON:
-            return self.python_file
-        elif self.type == DataChangeType.SHELL:
-            return self.shell_file
-        elif self.type == DataChangeType.TYPESCRIPT:
-            return self.typescript_file
+        elif (
+            self.type == DataChangeType.SQL_FILE
+            or self.type == DataChangeType.PYTHON
+            or self.type == DataChangeType.SHELL
+            or self.type == DataChangeType.TYPESCRIPT
+        ):
+            return self.file
         else:
             raise Exception(f"Invalid type {self.type}")
 
@@ -205,36 +200,24 @@ class MigrationPlan:
                 match forward.type:
                     case DataChangeType.SQL:
                         sha1.update_str([forward.sql])
-                    case DataChangeType.SQL_FILE:
-                        sha1.update_file([os.path.join(data_dir, forward.sql_file)])
-                    case DataChangeType.PYTHON:
-                        sha1.update_file([os.path.join(data_dir, forward.python_file)])
-                    case DataChangeType.SHELL:
-                        sha1.update_file([os.path.join(data_dir, forward.shell_file)])
-                    case DataChangeType.TYPESCRIPT:
-                        sha1.update_file(
-                            [os.path.join(data_dir, forward.typescript_file)]
-                        )
+                    case (
+                        DataChangeType.SQL_FILE
+                        | DataChangeType.PYTHON
+                        | DataChangeType.SHELL
+                        | DataChangeType.TYPESCRIPT
+                    ):
+                        sha1.update_file([os.path.join(data_dir, forward.file)])
                 if backward is not None:
                     match backward.type:
                         case DataChangeType.SQL:
                             sha1.update_str([backward.sql])
-                        case DataChangeType.SQL_FILE:
-                            sha1.update_file(
-                                [os.path.join(data_dir, backward.sql_file)]
-                            )
-                        case DataChangeType.PYTHON:
-                            sha1.update_file(
-                                [os.path.join(data_dir, backward.python_file)]
-                            )
-                        case DataChangeType.SHELL:
-                            sha1.update_file(
-                                [os.path.join(data_dir, backward.shell_file)]
-                            )
-                        case DataChangeType.TYPESCRIPT:
-                            sha1.update_file(
-                                [os.path.join(data_dir, backward.typescript_file)]
-                            )
+                        case (
+                            DataChangeType.SQL_FILE
+                            | DataChangeType.PYTHON
+                            | DataChangeType.SHELL
+                            | DataChangeType.TYPESCRIPT
+                        ):
+                            sha1.update_file([os.path.join(data_dir, backward.file)])
         self._checksum = sha1.hexdigest()
         return self._checksum
 
