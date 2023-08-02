@@ -187,7 +187,7 @@ class MigrationPlan:
         if self._checksum is not None:
             return self._checksum
         sha1 = helper.SHA1Helper()
-        sha1.update_str([self.version, self.name])
+        sha1.update_str([self.version, self.name, str(self.type)])
         forward = self.change.forward
         backward = self.change.backward
         match self.type:
