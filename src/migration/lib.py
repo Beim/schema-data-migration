@@ -287,7 +287,8 @@ class CLI:
             plan = self.mpm.get_plan_by_index(idx)
             if not hist.can_match(plan.version, plan.name, plan.get_checksum()):
                 raise Exception(
-                    f"unexpected migration history, ver={hist.ver}, name={hist.name}"
+                    f"unexpected migration history, ver={hist.ver}, name={hist.name},"
+                    f" checksum={hist.checksum}"
                 )
 
     def _get_and_check_versioned_migration_histories(
