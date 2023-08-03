@@ -1,6 +1,7 @@
 import collections
 import configparser
 import importlib.util
+import json
 import logging
 import os
 import shlex
@@ -14,7 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from tabulate import tabulate
 
-from . import err, helper
+from . import auto_test_plan, consts, err, helper
 from . import migration_plan as mp
 from .db import hist_dao, model
 from .db.db import make_session
@@ -400,7 +401,7 @@ class CLI:
                 dao.add_one(new_plans[0], operator=operator, fake=fake)
                 dao.commit()
 
-        to_execute_plans = new_plans[:]
+        dry_run_plans = new_plans[:]
         while len(new_plans) > 0:
             # migrate operation
             if not fake:
@@ -429,7 +430,7 @@ class CLI:
                     dao.add_one(new_plans[0], operator=operator, fake=fake)
                 dao.commit()
 
-        return applied_plans, to_execute_plans
+        return applied_plans, dry_run_plans
 
     def migrate(self):
         ver = (
@@ -453,18 +454,18 @@ class CLI:
         )
 
         # versioned migration
-        (applied_plans, to_execute_plans) = self._migrate_versioned(
+        (applied_plans, dry_run_plans) = self._migrate_versioned(
             ver, name, fake, dry_run, operator=operator
         )
         # repeatable migration
-        to_execute_repeatable_plans = self._migrate_repeatable(
+        dry_run_repeatable_plans = self._migrate_repeatable(
             applied_plans, ver, name, fake, dry_run, operator=operator
         )
 
         if dry_run:
             logger.info("Migration plans to execute:")
             self.print_dry_run(
-                to_execute_plans + to_execute_repeatable_plans, is_migrate=True
+                dry_run_plans + dry_run_repeatable_plans, is_migrate=True
             )
 
     def _migrate_repeatable(
@@ -689,8 +690,10 @@ class CLI:
                     )
                 dao.commit()
 
-    def _clear(self, schema: str):
+    def _clear(self):
+        logger.warning("Clearing database...")
         dao = self.build_dao()
+        schema = dao.session.bind.url.database
         with dao.session.begin():
             rows = dao.session.execute(
                 text(
@@ -701,6 +704,7 @@ class CLI:
             for [table_name] in rows:
                 dao.session.execute(text(f"drop table {table_name};"))
             dao.commit()
+        logger.warning("Database cleared")
 
     def read_migration_plans(self) -> mp.MigrationPlanManager:
         self.mpm = mp.MigrationPlanManager()
@@ -1486,3 +1490,69 @@ class CLI:
 
         if plan.change.backward is not None:
             check_forward_or_backward(plan.change.backward)
+
+    def test_gen(self):
+        test_type = self.args.type
+        output_file_path = self.args.output
+        walk_len = self.args.walk_len if "walk_len" in self.args else None
+        start = self.args.start if "start" in self.args else ""
+        important = self.args.important if "important" in self.args else ""
+        non_important = self.args.non_important if "non_important" in self.args else ""
+        atp = auto_test_plan.AutoTestPlan()
+
+        test_plan = atp.gen(
+            test_type=test_type,
+            walk_len=walk_len,
+            start=start,
+            important=important,
+            non_important=non_important,
+        )
+
+        plan_str = json.dumps(test_plan, indent=4)
+        logger.info("Test plan:\n%s", plan_str)
+        with open(output_file_path, "w") as f:
+            f.write(plan_str + "\n")
+        logger.info("Test plan is saved to %s", output_file_path)
+
+    def test_run(self):
+        test_type = self.args.type
+        clear = self.args.clear if "clear" in self.args else False
+        walk_len = self.args.walk_len if "walk_len" in self.args else None
+        start = self.args.start if "start" in self.args else ""
+        important = self.args.important if "important" in self.args else ""
+        non_important = self.args.non_important if "non_important" in self.args else ""
+        input_file_path = self.args.input
+        atp = auto_test_plan.AutoTestPlan()
+
+        if test_type == consts.TEST_TYPE_CUSTOM:
+            with open(input_file_path, "r") as f:
+                test_plan = json.load(f)
+        else:
+            test_plan = atp.gen(
+                test_type=test_type,
+                walk_len=walk_len,
+                start=start,
+                important=important,
+                non_important=non_important,
+            )
+        test_miration_plans: List[Tuple[mp.MigrationPlan, int]] = atp.read_test_plan(
+            test_plan
+        )
+
+        # clear database
+        if clear:
+            self._clear()
+
+        for idx, tp in enumerate(test_miration_plans):
+            self.args.version = tp[0].version
+            self.args.name = tp[0].name
+
+            if idx == 0:
+                self.migrate()
+                continue
+
+            prev_tp = test_miration_plans[idx - 1]
+            if tp[1] > prev_tp[1]:
+                self.migrate()
+            else:
+                self.rollback()

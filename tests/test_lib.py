@@ -6,7 +6,7 @@ from typing import List
 import pytest
 from sqlalchemy import text
 
-from migration import err
+from migration import consts, err
 from migration import migration_plan as mp
 from migration.db import model as dbmodel
 from migration.env import cli_env
@@ -70,7 +70,7 @@ def init_workspace():
         }
     )
     cli = CLI(args=args)
-    cli._clear(schema)
+    cli._clear()
     cli.migrate()
 
     dao = cli.dao
@@ -414,6 +414,46 @@ def test_clean_schema_store(sort_plan_by_version):
     assert not os.path.exists(
         os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, "00/11")
     )
+
+
+def test_auto_test(sort_plan_by_version):
+    init_workspace()
+
+    # add schema migration plan 0001
+    make_schema_migration_plan()
+
+    # add data migration plan 0002
+    make_data_migration_plan(
+        "insert into testtable (id, name) values (1, 'foo.bar');",
+        "delete from testtable where id = 1;",
+    )
+
+    # add data migration plan 0003
+    make_data_migration_plan(
+        "insert into testtable (id, name) values (2, 'foo.baz');",
+        "delete from testtable where id = 2;",
+    )
+
+    for t in consts.ALL_GEN_TEST_TYPE:
+        cli = CLI(args=make_args({"type": t, "output": "test_plan.json"}))
+        cli.test_gen()
+
+        cli = CLI(
+            args=make_args(
+                {
+                    "input": "test_plan.json",
+                    "environment": "dev",
+                    "clear": True,
+                    "type": t,
+                    "walk_len": 10,
+                    "start": "0001",
+                    "important": "0002",
+                    "non_important": "0003",
+                }
+            )
+        )
+        cli.test_run()
+    os.remove("test_plan.json")
 
 
 def test_migrate_happy_flow(sort_plan_by_version):

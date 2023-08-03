@@ -1,6 +1,6 @@
-# Schema-data-migration
+# sdm (schema data migration)
 
-Schema-data-migration is a powerful tool for managing database migrations in MySQL and MariaDB. With Schema-data-migration, you can easily manage both schema and data migration, making it an essential tool for any developer working with databases. 
+`sdm` is a powerful tool for managing database migrations in MySQL and MariaDB. With `sdm`, you can easily manage both schema and data migration, making it an essential tool for any developer working with databases. 
 
 Schema migration is powered by [skeema](https://www.skeema.io/), which uses a [declarative approach](https://www.skeema.io/blog/2019/01/18/declarative/) to schema management: the repository reflects a desired end-state of table definitions, and the tool figures out how to convert any database into this state.
 
@@ -8,7 +8,7 @@ Data migration is supported by [SQLAlchemy](https://docs.sqlalchemy.org/en/20/),
 
 ## Prerequisite
 
-Before you can use Schema-data-migration, you need to have the following software installed on your system:
+Before you can use `sdm`, you need to have the following software installed on your system:
 
 - [skeema](https://www.skeema.io/cli/download/)
 - Python (v3.11 or higher)
@@ -82,6 +82,11 @@ sdm skeema [extra_args...]
 # e.g.
 sdm skeema format dev
 sdm skeema lint dev
+
+# Generate automatic test
+sdm test gen [--output OUTPUT] {simple_forward,step_forward,step_backward,monkey}
+# Run automatic test
+sdm test run [--input INPUT] [--clear] {simple_forward,step_forward,step_backward,monkey,custom} environment
 ```
 
 ## Step by step guide
@@ -637,6 +642,45 @@ sdm migrate dev --fake
 sdm rollback dev --fake
 ```
 
+## Testing is important
+
+Testing is a crucial aspect of software development, and `sdm` can help you generate and run test scripts based on your migration plans. 
+
+```bash
+# Generate automatic test
+sdm test gen [--output OUTPUT] [--walk-len WALK_LEN] [--start START] [--important IMPORTANT] [--non-important NON_IMPORTANT] {simple_forward,step_forward,step_backward,monkey}
+# Run automatic test
+sdm test run [--input INPUT] [--clear] [--walk-len WALK_LEN] [--start START] [--important IMPORTANT] [--non-important NON_IMPORTANT] {simple_forward,step_forward,step_backward,monkey,custom} environment
+```
+
+There are four types of built-in test scripts that `sdm` can generate for you:
+
+- **simple_forward**: migrate from the initial version to the latest version directly.
+- **step_forward**: migrate from the initial version to the latest version step by step.
+- **step_backward**: migrate and rollback all possible paths step by step.
+- **monkey**: randomly migrate and rollback, with options to specify the walk length, start plan, important plans, and non-important plans.
+
+The generated test scripts will be saved into a JSON file:
+
+e.g.
+```json
+[
+    "0000_init",
+    "0001_new_test_table",
+    "0000_init",
+    "0002_insert_test_data",
+    "0001_new_test_table",
+    "0000_init",
+    "0003_add_addr_to_test_table",
+    "0002_insert_test_data",
+    "0001_new_test_table",
+    "0000_init"
+]
+```
+
+You can also run customized test script by setting the type to **custom**.
+
+
 ## Fix migration and rollback
 
 Sometimes a migration fails due to incorrect SQL statements, the state in migration history will be `PROCESSING` which will prevent any new migration or rollback to be executed.
@@ -659,13 +703,13 @@ sdm fix rollback dev --fake
 
 You'll occasionally come across situations where you and another developer have both committed a migration at the same time, resulting in two migrations with the same number.
 
-Don't worry - the numbers are just there for developers' reference, schema-data-migration just cares that each migration has a different `version` and `name`. Migration plans specify which other migration plan they depend on in the file, so it's possible to detect when theress two new migrations that aren't ordered.
+Don't worry - the numbers are just there for developers' reference, `sdm` just cares that each migration has a different `version` and `name`. Migration plans specify which other migration plan they depend on in the file, so it's possible to detect when theress two new migrations that aren't ordered.
 
-When this happens, schema-data-migration will prompt you.
+When this happens, `sdm` will prompt you.
 
 ## Migration log
 
-The skchema-data-migration tool creates two tables in the database by default: `_migration_history` and `_migration_history_log`. The `_migration_history` table stores information about applied migration plans, while the `_migration_history_log` table logs all operations. When you rollback a migration, a row will be deleted from _migration_history, and a row will be inserted into _migration_history_log to help you trace back the changes.
+`sdm` creates two tables in the database by default: `_migration_history` and `_migration_history_log`. The `_migration_history` table stores information about applied migration plans, while the `_migration_history_log` table logs all operations. When you rollback a migration, a row will be deleted from _migration_history, and a row will be inserted into _migration_history_log to help you trace back the changes.
 
 You can change the default database name by setting environment variable: `TABLE_MIGRATION_HISTORY` and `TABLE_MIGRATION_HISTORY`.
 
@@ -690,5 +734,4 @@ The first command will show you which files would be deleted without actually de
 ## Future plans
 
 - [ ] Support conditional execution of schema and data migration
-- [ ] Support testing plan
 - [ ] Support database/table sharding

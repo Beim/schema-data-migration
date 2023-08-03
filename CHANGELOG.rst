@@ -43,3 +43,8 @@ Version 0.3.0
 
 - Add `make-repeatable` command to generate repeatable migration
 - Add `checksum` and `type` to migration history table
+
+Version 0.4.0
+=============
+
+- Add `test` command to test migration

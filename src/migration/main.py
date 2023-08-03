@@ -4,6 +4,7 @@ import os
 import sys
 from enum import StrEnum
 
+from . import consts
 from .env import log_env
 from .lib import CLI
 
@@ -31,6 +32,75 @@ def add_mysql_args(parser: argparse.ArgumentParser):
         default="root",
         help="MySQL user",
     )
+
+
+def parse_test_sub_args(parser_gen: argparse.ArgumentParser):
+    parser_gen.add_argument(
+        "--walk-len",
+        required=False,
+        type=int,
+        default=None,
+        help="walk length for monkey test",
+    )
+    parser_gen.add_argument(
+        "--start",
+        required=False,
+        default="",
+        help="start migration plan for monkey test",
+    )
+    parser_gen.add_argument(
+        "--important",
+        required=False,
+        default="",
+        help="important migration plans for monkey test",
+    )
+    parser_gen.add_argument(
+        "--non-important",
+        required=False,
+        default="",
+        help="non-important migration plans for monkey test",
+    )
+
+
+def parse_test_args(parser: argparse.ArgumentParser):
+    subparsers = parser.add_subparsers(
+        title="subcommand", dest="subcommand", required=True
+    )
+
+    parser_gen = subparsers.add_parser(
+        Command.TEST_GEN, help="generate test migration plans"
+    )
+    parser_gen.add_argument(
+        "type", choices=consts.ALL_GEN_TEST_TYPE, help="test plan type"
+    )
+    parser_gen.add_argument(
+        "--output",
+        "-o",
+        required=False,
+        default="test_plan.json",
+    )
+    parse_test_sub_args(parser_gen)
+
+    parser_run = subparsers.add_parser(
+        Command.TEST_RUN, help="run test migration plans"
+    )
+    parser_run.add_argument("type", choices=consts.ALL_TEST_TYPE, help="test plan type")
+    parser_run.add_argument(
+        "environment",
+        help="environment name",
+    )
+    parser_run.add_argument(
+        "--input",
+        "-i",
+        required=False,
+        default="test_plan.json",
+    )
+    parser_run.add_argument(
+        "--clear",
+        action="store_true",
+        help="clear test environment before running",
+    )
+    parse_test_sub_args(parser_run)
 
 
 def parse_clean_args(parser: argparse.ArgumentParser):
@@ -320,6 +390,11 @@ class Command(StrEnum):
     CLEAN = "clean"
     CLEAN_SCHEMA_STORE = "store"
 
+    TEST = "test"
+    ALIAS_TEST = "t"
+    TEST_GEN = "gen"
+    TEST_RUN = "run"
+
 
 def parse_args(args):
     parent_parser = argparse.ArgumentParser(
@@ -419,6 +494,9 @@ def parse_args(args):
     parser_clean = subparsers.add_parser(Command.CLEAN, help="clean schema store")
     parse_clean_args(parser_clean)
 
+    parser_test = subparsers.add_parser(Command.TEST, help="test migration plans")
+    parse_test_args(parser_test)
+
     return parent_parser.parse_args(args)
 
 
@@ -472,6 +550,12 @@ def main(raw_args):
                             "Found %d unexpected files in schema store"
                             % len(unexpected_files)
                         )
+        case Command.TEST:
+            match args.subcommand:
+                case Command.TEST_GEN:
+                    cli.test_gen()
+                case Command.TEST_RUN:
+                    cli.test_run()
 
 
 def run():

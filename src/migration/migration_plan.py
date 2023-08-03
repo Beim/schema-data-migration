@@ -150,6 +150,45 @@ class MigrationSignature:
             obj["name"] = self.name
         return obj
 
+    @staticmethod
+    def from_str(s: str) -> "MigrationSignature":
+        split = s.split("_")
+        if len(split) < 1:
+            raise Exception(f"Invalid version or name {s}")
+        version = split[0].zfill(4)
+        name = "_".join(split[1:])
+        if not name:
+            name = None
+        sig = MigrationSignature(version=version, name=name)
+        sig.validate(type=None, require_name=False)
+        return sig
+
+    def validate(self, type: Type = None, require_name: bool = True):
+        # validate version
+        match type:
+            case Type.SCHEMA | Type.DATA:
+                if not self.version.isdigit() or int(self.version) < 0:
+                    raise Exception(f"Invalid version {self.version}")
+            case Type.REPEATABLE:
+                if self.version != RepeatableVersion:
+                    raise Exception(f"Invalid version {self.version}")
+            case None:
+                if self.version.isdigit():
+                    if int(self.version) < 0:
+                        raise Exception(f"Invalid version {self.version}")
+                else:
+                    if self.version != RepeatableVersion:
+                        raise Exception(f"Invalid version {self.version}")
+            case _:
+                raise Exception(f"Invalid type {self.type}")
+        # validate name
+        if self.name is None and not require_name:
+            return
+        if not re.match(r"^[a-zA-Z0-9_]+$", self.name):
+            raise Exception(
+                f"Invalid name {self.name}, only alphanumeric and _ allowed"
+            )
+
 
 InitialMigrationSignature = MigrationSignature(version="0000", name="init")
 RepeatableVersion = "R"
@@ -230,19 +269,7 @@ class MigrationPlan:
         return obj
 
     def save(self) -> str:
-        match self.type:
-            case Type.SCHEMA | Type.DATA:
-                if not self.version.isdigit() or int(self.version) < 0:
-                    raise Exception(f"Invalid version {self.version}")
-            case Type.REPEATABLE:
-                if self.version != RepeatableVersion:
-                    raise Exception(f"Invalid version {self.version}")
-            case _:
-                raise Exception(f"Invalid type {self.type}")
-        if not re.match(r"^[a-zA-Z0-9_]+$", self.name):
-            raise Exception(
-                f"Invalid name {self.name}, only alphanumeric and _ allowed"
-            )
+        MigrationSignature(version=self.version, name=self.name).validate(self.type)
 
         filepath = os.path.join(
             cli_env.MIGRATION_CWD,
@@ -454,3 +481,13 @@ class MigrationPlanManager:
             _, right_idx = self.must_get_plan_by_signature(right)
 
         return self.plans[left_idx : right_idx + 1]
+
+    def get_version_dep_graph(self) -> nx.DiGraph:
+        G = nx.DiGraph()
+        G.add_nodes_from([i for i in range(len(self.plans))])
+        for idx in range(1, len(self.plans)):
+            G.add_edge(idx - 1, idx)
+            plan = self.plans[idx]
+            if plan.change.backward is not None:
+                G.add_edge(idx, idx - 1)
+        return G
