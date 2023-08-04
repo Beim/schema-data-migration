@@ -539,7 +539,7 @@ class CLI:
             if p.ignore_after is not None:
                 ignore_sig = p.ignore_after
                 # check if ignore_sig is in applied_histories
-                if any(ap.match(dep_sig) for ap in applied_plans):
+                if any(ap.match(ignore_sig) for ap in applied_plans):
                     logger.debug(
                         "repeatable migration %s is not executed because ignore_after"
                         " %s is applied",

@@ -48,3 +48,8 @@ Version 0.4.0
 =============
 
 - Add `test` command to test migration
+
+Version 0.4.1
+=============
+
+- Fix: repeatable migration is not executed when ignore_after is set
