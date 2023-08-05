@@ -512,7 +512,7 @@ class User {
 
 export const Entities = [User]
 
-export const Run = async (datasource: DataSource) => {
+export const Run = async (datasource: DataSource, args: { [key: string]: string }) => {
   const user = new User()
   user.id = 4
   user.name = "foo"
@@ -537,7 +537,7 @@ class User {
 
 export const Entities = [User]
 
-export const Run = async (datasource: DataSource) => {
+export const Run = async (datasource: DataSource, args: { [key: string]: string }) => {
   const userRepository = datasource.manager.getRepository(User)
   const user = await userRepository.findOneBy({id: 4})
   await userRepository.remove(user)
@@ -733,5 +733,5 @@ The first command will show you which files would be deleted without actually de
 
 ## Future plans
 
-- [ ] Support conditional execution of schema and data migration
+- [x] Support conditional execution of schema and data migration
 - [ ] Support database/table sharding

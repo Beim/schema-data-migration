@@ -93,29 +93,77 @@ class Migrator:
 
 
 class CLIMigrator(Migrator):
+    def check_condition(
+        self,
+        condition: mp.ConditionCheck,
+        args: Namespace,
+        checksum_match: Optional[bool] = None,
+    ) -> bool:
+        match condition.type:
+            case mp.DataChangeType.SQL:
+                return self.check_condition_sql(condition.sql, condition.expected, args)
+            case mp.DataChangeType.SQL_FILE:
+                return self.check_condition_sql_file(
+                    condition.file, condition.expected, args
+                )
+            case mp.DataChangeType.PYTHON:
+                return self.check_condition_python(
+                    condition.file,
+                    condition.expected,
+                    args,
+                    checksum_match=checksum_match,
+                )
+            case mp.DataChangeType.SHELL:
+                return self.check_condition_shell(
+                    condition.file,
+                    condition.expected,
+                    args,
+                    checksum_match=checksum_match,
+                )
+            case mp.DataChangeType.TYPESCRIPT:
+                return self.check_condition_typescript(
+                    condition.file,
+                    condition.expected,
+                    args,
+                    checksum_match=checksum_match,
+                )
+
     def forward(self, migration_plan: mp.MigrationPlan, args: Namespace):
         logger.info(f"Executing {migration_plan}")
         forward = migration_plan.change.forward
+
+        # precheck
+        if forward.precheck is not None:
+            if not self.check_condition(
+                forward.precheck,
+                args,
+                checksum_match=migration_plan.get_checksum_match(),
+            ):
+                raise err.ConditionCheckFailedError(
+                    f"precheck failed for {migration_plan}"
+                )
+
         if migration_plan.type == mp.Type.SCHEMA:
             sha1 = forward.id
             self.move_schema_to(sha1, args)
-            return
         if migration_plan.type in [mp.Type.DATA, mp.Type.REPEATABLE]:
             if forward.type == mp.DataChangeType.SQL:
                 self.migrate_data_sql(forward.sql, args)
-                return
             if forward.type == mp.DataChangeType.SQL_FILE:
                 self.migrate_data_sql_file(forward.file, args)
-                return
             if forward.type == mp.DataChangeType.PYTHON:
                 self.migrate_data_python(forward.file, args)
-                return
             if forward.type == mp.DataChangeType.SHELL:
                 self.migrate_data_shell(forward.file, args)
-                return
             if forward.type == mp.DataChangeType.TYPESCRIPT:
                 self.migrate_data_typescript(forward.file, args)
-                return
+
+        # postcheck
+        if forward.postcheck is not None:
+            if not self.check_condition(forward.postcheck, args):
+                raise err.ConditionCheckFailedError(
+                    f"postcheck failed for {migration_plan}"
+                )
 
     def backward(self, migration_plan: mp.MigrationPlan, args: Namespace):
         logger.info(f"Rollbacking {migration_plan}")
@@ -123,48 +171,104 @@ class CLIMigrator(Migrator):
         if backward is None:
             logger.info(f"no backward change for {migration_plan}")
             return
+
+        # precheck
+        if backward.precheck is not None:
+            if not self.check_condition(backward.precheck, args):
+                raise err.ConditionCheckFailedError(
+                    f"precheck failed for {migration_plan}"
+                )
+
         if migration_plan.type == mp.Type.SCHEMA:
             sha1 = backward.id
             self.move_schema_to(sha1, args)
-            return
         if migration_plan.type in [mp.Type.DATA, mp.Type.REPEATABLE]:
             if backward.type == mp.DataChangeType.SQL:
                 self.migrate_data_sql(backward.sql, args)
-                return
             if backward.type == mp.DataChangeType.SQL_FILE:
                 self.migrate_data_sql_file(backward.file, args)
-                return
             if backward.type == mp.DataChangeType.PYTHON:
                 self.migrate_data_python(backward.file, args)
-                return
             if backward.type == mp.DataChangeType.SHELL:
                 self.migrate_data_shell(backward.file, args)
-                return
             if backward.type == mp.DataChangeType.TYPESCRIPT:
                 self.migrate_data_typescript(backward.file, args)
-                return
 
-    def migrate_data_shell(self, shell_file: str, args: Namespace):
+        # postcheck
+        if backward.postcheck is not None:
+            if not self.check_condition(backward.postcheck, args):
+                raise err.ConditionCheckFailedError(
+                    f"postcheck failed for {migration_plan}"
+                )
+
+    def check_condition_shell(
+        self,
+        shell_file: str,
+        expected: int,
+        args: Namespace,
+        checksum_match: Optional[bool] = None,
+    ):
+        try:
+            self.migrate_data_shell(
+                shell_file, args, expected, checksum_match=checksum_match
+            )
+        except Exception:
+            return False
+        return True
+
+    def migrate_data_shell(
+        self,
+        shell_file: str,
+        args: Namespace,
+        expected: Optional[int] = None,
+        checksum_match: Optional[bool] = None,
+    ):
         shell_file_path = os.path.join(
             cli_env.MIGRATION_CWD, cli_env.DATA_DIR, shell_file
         )
         section = get_env_ini_section(args.environment)
         cmd = f"sh {shell_file_path}"
+        env = get_env_with_update(
+            {
+                "MYSQL_PWD": cli_env.MYSQL_PWD,
+                "HOST": section["host"],
+                "PORT": section["port"],
+                "USER": section["user"],
+                "SCHEMA": section["schema"],
+            }
+        )
+        if expected is not None:
+            env["SDM_EXPECTED"] = str(expected)
+        if checksum_match is not None:
+            env["SDM_CHECKSUM_MATCH"] = "1" if checksum_match else "0"
         subprocess.check_call(
             shlex.split(cmd),
             cwd=cli_env.MIGRATION_CWD,
-            env=get_env_with_update(
-                {
-                    "MYSQL_PWD": cli_env.MYSQL_PWD,
-                    "HOST": section["host"],
-                    "PORT": section["port"],
-                    "USER": section["user"],
-                    "SCHEMA": section["schema"],
-                }
-            ),
+            env=env,
         )
 
-    def migrate_data_typescript(self, ts_file: str, args: Namespace):
+    def check_condition_typescript(
+        self,
+        ts_file: str,
+        expected: int,
+        args: Namespace,
+        checksum_match: Optional[bool] = None,
+    ):
+        try:
+            self.migrate_data_typescript(
+                ts_file, args, expected, checksum_match=checksum_match
+            )
+        except Exception:
+            return False
+        return True
+
+    def migrate_data_typescript(
+        self,
+        ts_file: str,
+        args: Namespace,
+        expected: Optional[int] = None,
+        checksum_match: Optional[bool] = None,
+    ) -> int:
         section = get_env_ini_section(args.environment)
         ts_file_path = os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, ts_file)
         # create temporary directory under migration cwd/tmp
@@ -185,22 +289,43 @@ class CLIMigrator(Migrator):
             subprocess.check_call(
                 shlex.split(f"{cli_env.NPM_CMD_PATH} run build"), cwd=temp_dir
             )
+            env = get_env_with_update(
+                {
+                    "MYSQL_PWD": cli_env.MYSQL_PWD,
+                    "HOST": section["host"],
+                    "PORT": section["port"],
+                    "USER": section["user"],
+                    "SCHEMA": section["schema"],
+                }
+            )
+            if expected is not None:
+                env["SDM_EXPECTED"] = str(expected)
+            if checksum_match is not None:
+                env["SDM_CHECKSUM_MATCH"] = "1" if checksum_match else "0"
+
             # run js file
             subprocess.check_call(
                 [cli_env.NODE_CMD_PATH, "src/index.js"],
                 cwd=temp_dir,
-                env=get_env_with_update(
-                    {
-                        "MYSQL_PWD": cli_env.MYSQL_PWD,
-                        "HOST": section["host"],
-                        "PORT": section["port"],
-                        "USER": section["user"],
-                        "SCHEMA": section["schema"],
-                    }
-                ),
+                env=env,
             )
+            return 0
 
-    def migrate_data_python(self, python_file: str, args: Namespace):
+    def check_condition_python(
+        self,
+        python_file: str,
+        expected: int,
+        args: Namespace,
+        checksum_match: Optional[bool] = None,
+    ):
+        result = self.migrate_data_python(
+            python_file, args, checksum_match=checksum_match
+        )
+        return result == expected
+
+    def migrate_data_python(
+        self, python_file: str, args: Namespace, checksum_match: Optional[bool] = None
+    ) -> int:
         python_file_path = os.path.join(
             cli_env.MIGRATION_CWD, cli_env.DATA_DIR, python_file
         )
@@ -208,7 +333,10 @@ class CLIMigrator(Migrator):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         session = build_session_from_env(args.environment, echo=cli_env.ALLOW_ECHO_SQL)
-        module.run(session)
+        obj = {}
+        if checksum_match is not None:
+            obj["SDM_CHECKSUM_MATCH"] = "1" if checksum_match else "0"
+        return module.run(session, args=obj)
 
     def migrate_data_sql_file(self, sql_file: str, args: Namespace):
         with open(os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, sql_file)) as f:
@@ -220,6 +348,18 @@ class CLIMigrator(Migrator):
         with session.begin():
             result = session.execute(text(sql))
             logger.info(f"migrate data, sql={sql}, result.rowcount={result.rowcount}")
+
+    def check_condition_sql_file(self, sql_file: str, expected: int, args: Namespace):
+        with open(os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, sql_file)) as f:
+            sql = f.read()
+        return self.check_condition_sql(sql, expected, args)
+
+    def check_condition_sql(self, sql: str, expected: int, args: Namespace):
+        session = build_session_from_env(args.environment, echo=cli_env.ALLOW_ECHO_SQL)
+        with session.begin():
+            result = session.execute(text(sql)).one_or_none()
+            logger.info(f"check condition, sql={sql}, result={result}")
+            return result[0] == expected
 
     def move_schema_to(self, sha1: str, args: Namespace):
         index_file = os.path.join(
@@ -552,8 +692,12 @@ class CLI:
             if (
                 hist_dto is not None
                 and hist_dto.checksum == p.get_checksum()
-                and hist_dto.state
-                == model.MigrationState.SUCCESSFUL  # if it's not successful, retry
+                and hist_dto.state == model.MigrationState.SUCCESSFUL
+                and (
+                    p.change.forward.precheck is None
+                    or p.change.forward.precheck.type == mp.DataChangeType.SQL
+                    or p.change.forward.precheck.type == mp.DataChangeType.SQL_FILE
+                )
             ):
                 logger.debug(
                     "repeatable migration %s is not executed because it has been"
@@ -562,6 +706,11 @@ class CLI:
                 )
                 continue
 
+            p.set_checksum_match(
+                hist_dto.checksum == p.get_checksum()
+                if hist_dto is not None and hist_dto.checksum is not None
+                else False
+            )
             to_execute_plans.append(p)
         return to_execute_plans
 

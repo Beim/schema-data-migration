@@ -160,7 +160,7 @@ def test_migrate_python_file(sort_plan_by_version):
         f.write("""from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-def run(session: Session):
+def run(session: Session, args: dict):
     with session.begin():
         session.execute(text("insert into testtable (id, name) values (1, 'foo.bar');"))
 """)
@@ -233,7 +233,7 @@ def test_migrate_sql_file(sort_plan_by_version):
         assert row[0] == "foo.bar"
 
 
-def make_data_migration_plan(forward_sql: str, backward_sql: str):
+def make_data_migration_plan(forward_sql: str, backward_sql: str) -> mp.MigrationPlan:
     args = make_args(
         {
             "name": "insert_test_data",
@@ -456,6 +456,268 @@ def test_auto_test(sort_plan_by_version):
     os.remove("test_plan.json")
 
 
+def test_condition_check_sql(sort_plan_by_version):
+    logger.info("=== start === test_condition_check_sql")
+    init_workspace()
+    # add schema migration plan 0001
+    make_schema_migration_plan()
+    # add data migration plan 0002
+    data_plan = make_data_migration_plan(
+        "insert into testtable (id, name) values (1, 'foo.bar');",
+        "delete from testtable where id = 1;",
+    )
+    # this check should prevent the data migration plan from being applied
+    data_plan.change.forward.precheck = mp.ConditionCheck(
+        type=str(mp.DataChangeType.SQL),
+        sql="select count(*) from testtable where id = 1;",
+        expected=1,
+    )
+    data_plan.save()
+
+    with pytest.raises(err.ConditionCheckFailedError):
+        cli = migrate_dev()
+
+    cli = CLI(make_args({"environment": "dev"}))
+    cli.build_dao()
+    hists = cli.dao.get_all_dto()
+    assert len(hists) == 3
+    assert hists[-1].state == dbmodel.MigrationState.PROCESSING
+
+
+def test_condition_check_sql_file(sort_plan_by_version):
+    logger.info("=== start === test_condition_check_sql_file")
+    init_workspace()
+    make_schema_migration_plan()
+    data_plan = make_data_migration_plan(
+        "insert into testtable (id, name) values (1, 'foo.bar');",
+        "delete from testtable where id = 1;",
+    )
+    with open(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, "check.sql"), "w"
+    ) as f:
+        f.write("select count(*) from testtable where id = 1;")
+    data_plan.change.forward.precheck = mp.ConditionCheck(
+        type=str(mp.DataChangeType.SQL_FILE),
+        file="check.sql",
+        expected=1,
+    )
+    data_plan.save()
+
+    with pytest.raises(err.ConditionCheckFailedError):
+        cli = migrate_dev()
+
+    cli = CLI(make_args({"environment": "dev"}))
+    cli.build_dao()
+    hists = cli.dao.get_all_dto()
+    assert len(hists) == 3
+    assert hists[-1].state == dbmodel.MigrationState.PROCESSING
+
+
+@pytest.mark.slow
+def test_condition_check_typescript_file(sort_plan_by_version):
+    logger.info("=== start === test_condition_check_typescript_file")
+    init_workspace()
+
+    # add schema migration plan 0001
+    make_schema_migration_plan()
+
+    # add data migration plan 0002
+    args = make_args(
+        {
+            "name": "insert_test_data",
+            "type": mp.DataChangeType.TYPESCRIPT,
+        }
+    )
+    cli = CLI(args=args)
+    cli.make_data_migration()
+    data_plan = cli.read_migration_plans().get_plan_by_index(-1)
+
+    with open(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, "run.ts"), "w"
+    ) as f:
+        f.write("""import { Column, PrimaryColumn, Entity, DataSource } from "typeorm"
+@Entity()
+class Testtable {
+  @PrimaryColumn()
+  id: number
+
+  @Column()
+  name: string
+}
+
+export const Entities = [Testtable]
+
+export const Run = async (datasource: DataSource, args: { [key: string]: string }): Promise<number> => {
+    await datasource.manager.insert(Testtable, { id: 1, name: "fooxxx" })
+    return 0
+}
+""")  # noqa
+    data_plan.change.forward.file = "run.ts"
+
+    with open(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, "check.ts"), "w"
+    ) as f:
+        f.write("""import { Column, PrimaryColumn, Entity, DataSource } from "typeorm"
+@Entity()
+class Testtable {
+  @PrimaryColumn()
+  id: number
+
+  @Column()
+  name: string
+}
+
+export const Entities = [Testtable]
+
+export const Run = async (datasource: DataSource, args: { [key: string]: string }): Promise<number> => {
+    const count = await datasource.manager.count(Testtable, { where: { id: 1 } })
+    return count
+}
+""")  # noqa
+    data_plan.change.forward.precheck = mp.ConditionCheck(
+        type=str(mp.DataChangeType.TYPESCRIPT),
+        file="check.ts",
+        expected=1,
+    )
+    data_plan.save()
+
+    import subprocess
+
+    subprocess.run(["npm", "install"], cwd=cli_env.MIGRATION_CWD)
+    with pytest.raises(err.ConditionCheckFailedError):
+        cli = migrate_dev()
+
+    cli = CLI(make_args({"environment": "dev"}))
+    cli.build_dao()
+    hists = cli.dao.get_all_dto()
+    assert len(hists) == 3
+    assert hists[-1].state == dbmodel.MigrationState.PROCESSING
+
+    # fix the expected value, and fix migration
+    data_plan.change.forward.precheck.expected = 0
+    data_plan.save()
+    cli = CLI(
+        make_args(
+            {
+                "environment": "dev",
+            }
+        )
+    )
+    cli.fix_migrate()
+    cli = CLI(make_args({"environment": "dev"}))
+    cli.build_dao()
+    hists = cli.dao.get_all_dto()
+    assert len(hists) == 3
+    assert hists[-1].state == dbmodel.MigrationState.SUCCESSFUL
+
+
+def test_condition_check_shell_file(sort_plan_by_version):
+    logger.info("=== start === test_condition_check_shell_file")
+    init_workspace()
+    make_schema_migration_plan()
+    migrate_dev()
+
+    with open(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, "check.sh"), "w"
+    ) as f:
+        f.write("""#!/bin/sh
+result=$(mysql -uroot -h127.0.0.1 -P3307 -Dmigration_test -p's@mplep@ssword' -e "select count(*) from testtable;" | awk 'NR==2{print $1}')
+if [ -n "$result" ] && [ "$result" -eq "$SDM_EXPECTED" ]; then
+    exit 0
+else
+    exit 1
+fi
+""")  # noqa
+    # add data migration plan
+    data_plan = make_data_migration_plan(
+        "insert into testtable (id, name) values (1, 'foo.bar');",
+        "delete from testtable where id = 1;",
+    )
+    data_plan.change.forward.precheck = mp.ConditionCheck(
+        type=str(mp.DataChangeType.SHELL),
+        file="check.sh",
+        expected=1,
+    )
+    data_plan.save()
+
+    with pytest.raises(err.ConditionCheckFailedError):
+        migrate_dev()
+
+    cli = CLI(make_args({"environment": "dev"}))
+    cli.build_dao()
+    hists = cli.dao.get_all_dto()
+    assert len(hists) == 3
+    assert hists[-1].state == dbmodel.MigrationState.PROCESSING
+
+    # fix the expected value, and fix migration
+    data_plan.change.forward.precheck.expected = 0
+    data_plan.save()
+    cli = CLI(
+        make_args(
+            {
+                "environment": "dev",
+            }
+        )
+    )
+    cli.fix_migrate()
+    cli = CLI(make_args({"environment": "dev"}))
+    cli.build_dao()
+    hists = cli.dao.get_all_dto()
+    assert len(hists) == 3
+    assert hists[-1].state == dbmodel.MigrationState.SUCCESSFUL
+
+
+def test_condition_check_python_file(sort_plan_by_version):
+    logger.info("=== start === test_condition_check_python_file")
+    init_workspace()
+    make_schema_migration_plan()
+    data_plan = make_data_migration_plan(
+        "insert into testtable (id, name) values (1, 'foo.bar');",
+        "delete from testtable where id = 1;",
+    )
+    with open(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, "check.py"), "w"
+    ) as f:
+        f.write("""from sqlalchemy.orm import Session
+from sqlalchemy import text
+
+def run(session: Session, args: dict) -> int:
+    with session.begin():
+        result = session.execute(text("select count(*) from testtable where id = 1;")).one_or_none()
+        return result[0]
+""")  # noqa
+    data_plan.change.forward.precheck = mp.ConditionCheck(
+        type=str(mp.DataChangeType.PYTHON),
+        file="check.py",
+        expected=1,
+    )
+    data_plan.save()
+
+    with pytest.raises(err.ConditionCheckFailedError):
+        cli = migrate_dev()
+
+    cli = CLI(make_args({"environment": "dev"}))
+    cli.build_dao()
+    hists = cli.dao.get_all_dto()
+    assert len(hists) == 3
+    assert hists[-1].state == dbmodel.MigrationState.PROCESSING
+
+    # fix migration plan, and retry to fix migration
+    data_plan.change.forward.precheck.expected = 0
+    data_plan.save()
+    cli = CLI(
+        make_args(
+            {
+                "environment": "dev",
+            }
+        )
+    )
+    cli.fix_migrate()
+    hists = cli.dao.get_all_dto()
+    assert len(hists) == 3
+    assert hists[-1].state == dbmodel.MigrationState.SUCCESSFUL
+
+
 def test_migrate_happy_flow(sort_plan_by_version):
     logger.info("=== start === test_migrate_happy_flow")
     # init workspace
@@ -541,26 +803,85 @@ def test_migrate_happy_flow(sort_plan_by_version):
     assert len(hists) == 4
 
 
-def test_repeatable_migration(sort_plan_by_version):
-    logger.info("=== start === test_repeatable_migration")
+def migrate_and_check(len_hists: int, len_row: int):
+    cli = migrate_dev()
+    check_len_hists_row(cli, len_hists, len_row)
 
-    def migrate_and_check(len_hists: int, len_row: int):
-        cli = migrate_dev()
-        check(cli, len_hists, len_row)
 
-    def check(cli: CLI, len_hists: int, len_row: int):
-        dao = cli.dao
-        with dao.session.begin():
-            hists = dao.get_all()
-            assert len(hists) == len_hists
-            row = dao.session.execute(text("select name from testtable;")).all()
-            assert len(row) == len_row
+def check_len_hists_row(cli: CLI, len_hists: int, len_row: int):
+    dao = cli.dao
+    with dao.session.begin():
+        hists = dao.get_all()
+        assert len(hists) == len_hists
+        row = dao.session.execute(text("select name from testtable;")).all()
+        assert len(row) == len_row
 
+
+def test_condition_check_repeatable_migration(sort_plan_by_version):
+    logger.info("=== start === test_condition_check_repeatable_migration")
     init_workspace()
-
     # add schema migration plan 0001
     make_schema_migration_plan("new_test_table", id_primary_key=False)
+    migrate_dev()
+    # add data migration plan 0002
+    make_data_migration_plan(
+        "insert into testtable (id, name) values (1, 'foo.bar');",
+        "delete from testtable where id = 1;",
+    )
 
+    # add repeatable migration plan R_seed_data
+    cli = CLI(
+        args=make_args(
+            {
+                "name": "seed_data",
+                "type": "sql",
+            }
+        )
+    )
+    cli.make_repeatable_migration()
+    repeat_plan: mp.MigrationPlan = cli.read_migration_plans().get_repeatable_plan(
+        "seed_data"
+    )
+    repeat_plan.change.forward.sql = (
+        "insert into testtable (id, name) values (100, 'foooooo');"
+    )
+    repeat_plan.dependencies = [
+        mp.MigrationSignature(version="0001", name="new_test_table"),
+    ]
+    repeat_plan.change.forward.precheck = mp.ConditionCheck(
+        type=str(mp.DataChangeType.PYTHON),
+        file="check.py",
+        expected=0,
+    )
+    repeat_plan.save()
+    with open(
+        os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, "check.py"), "w"
+    ) as f:
+        f.write("""from sqlalchemy.orm import Session
+from sqlalchemy import text
+
+def run(session: Session, args: dict) -> int:
+    print("SDM_CHECKSUM_MATCH equals to {}".format(args['SDM_CHECKSUM_MATCH']))
+    return int(args['SDM_CHECKSUM_MATCH'])
+""")
+
+    # run migrate, should execute the repeatable migration
+    migrate_and_check(len_hists=4, len_row=2)
+
+    # run migrate again, should not execute the repeatable migration again
+    #   because the checksum validation in python file failed
+    with pytest.raises(err.ConditionCheckFailedError):
+        migrate_dev()
+    cli = CLI(make_args({"environment": "dev"}))
+    cli.build_dao()
+    check_len_hists_row(cli, len_hists=4, len_row=2)
+
+
+def test_repeatable_migration(sort_plan_by_version):
+    logger.info("=== start === test_repeatable_migration")
+    init_workspace()
+    # add schema migration plan 0001
+    make_schema_migration_plan("new_test_table", id_primary_key=False)
     # add data migration plan 0002
     make_data_migration_plan(
         "insert into testtable (id, name) values (1, 'foo.bar');",
@@ -616,7 +937,7 @@ def test_repeatable_migration(sort_plan_by_version):
         )
     )
     cli.rollback()
-    check(cli=cli, len_hists=3, len_row=2)
+    check_len_hists_row(cli=cli, len_hists=3, len_row=2)
 
     # add schema migration plan 0003 which alter the table
     with open(
@@ -695,4 +1016,4 @@ def test_repeatable_migration(sort_plan_by_version):
         )
     )
     cli.rollback()
-    check(cli=cli, len_hists=4, len_row=3)
+    check_len_hists_row(cli=cli, len_hists=4, len_row=3)

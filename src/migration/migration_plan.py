@@ -17,13 +17,6 @@ from . import helper
 logger = logging.getLogger(__name__)
 
 
-# class EnhancedJSONEncoder(json.JSONEncoder):
-#     def default(self, o):
-#         if dataclasses.is_dataclass(o):
-#             return dataclasses.asdict(o)
-#         return super().default(o)
-
-
 class Type(StrEnum):
     SCHEMA = "schema"
     DATA = "data"
@@ -52,23 +45,11 @@ class DataChangeType(StrEnum):
 
 
 @dataclass
-class SchemaForward:
-    id: str
-
-    def to_str_for_print(self) -> str:
-        return self.id
-
-    def to_dict(self) -> Dict:
-        return {
-            "id": self.id,
-        }
-
-
-@dataclass
-class DataForward:
+class ConditionCheck:
     type: str  # DataChangeType
     sql: Optional[str | None] = None
     file: Optional[str | None] = None
+    expected: Optional[int | None] = None
 
     def to_dict(self) -> Dict:
         obj = {
@@ -84,6 +65,57 @@ class DataForward:
                 | DataChangeType.TYPESCRIPT
             ):
                 obj["file"] = self.file
+        if self.expected is not None:
+            obj["expected"] = self.expected
+        return obj
+
+
+@dataclass
+class SchemaForward:
+    id: str
+    precheck: Optional[ConditionCheck | None] = None
+    postcheck: Optional[ConditionCheck | None] = None
+
+    def to_str_for_print(self) -> str:
+        return self.id
+
+    def to_dict(self) -> Dict:
+        obj = {
+            "id": self.id,
+        }
+        if self.precheck is not None:
+            obj["precheck"] = self.precheck.to_dict()
+        if self.postcheck is not None:
+            obj["postcheck"] = self.postcheck.to_dict()
+        return obj
+
+
+@dataclass
+class DataForward:
+    type: str  # DataChangeType
+    sql: Optional[str | None] = None
+    file: Optional[str | None] = None
+    precheck: Optional[ConditionCheck | None] = None
+    postcheck: Optional[ConditionCheck | None] = None
+
+    def to_dict(self) -> Dict:
+        obj = {
+            "type": self.type,
+        }
+        match self.type:
+            case DataChangeType.SQL:
+                obj["sql"] = self.sql
+            case (
+                DataChangeType.SQL_FILE
+                | DataChangeType.PYTHON
+                | DataChangeType.SHELL
+                | DataChangeType.TYPESCRIPT
+            ):
+                obj["file"] = self.file
+        if self.precheck is not None:
+            obj["precheck"] = self.precheck.to_dict()
+        if self.postcheck is not None:
+            obj["postcheck"] = self.postcheck.to_dict()
         return obj
 
     def to_str_for_print(self) -> str:
@@ -205,6 +237,13 @@ class MigrationPlan:
     ignore_after: Optional[MigrationSignature | None] = None
 
     _checksum: Optional[str | None] = None  # the value is not saved to file
+    _checksum_match: Optional[bool | None] = None  # the value is not saved to file
+
+    def set_checksum_match(self, checksum_match: bool):
+        self._checksum_match = checksum_match
+
+    def get_checksum_match(self) -> Optional[bool | None]:
+        return self._checksum_match
 
     def __str__(self) -> str:
         return f"MigrationPlan({self.version}_{self.name})"
@@ -226,19 +265,13 @@ class MigrationPlan:
         if self._checksum is not None:
             return self._checksum
         sha1 = helper.SHA1Helper()
-        sha1.update_str([self.version, self.name, str(self.type)])
+        sha1.update_str(self.to_json_str())
         forward = self.change.forward
         backward = self.change.backward
+        data_dir = os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR)
         match self.type:
-            case Type.SCHEMA:
-                sha1.update_str([forward.id])
-                if backward is not None:
-                    sha1.update_str([backward.id])
             case Type.DATA | Type.REPEATABLE:
-                data_dir = os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR)
                 match forward.type:
-                    case DataChangeType.SQL:
-                        sha1.update_str([forward.sql])
                     case (
                         DataChangeType.SQL_FILE
                         | DataChangeType.PYTHON
@@ -248,8 +281,6 @@ class MigrationPlan:
                         sha1.update_file([os.path.join(data_dir, forward.file)])
                 if backward is not None:
                     match backward.type:
-                        case DataChangeType.SQL:
-                            sha1.update_str([backward.sql])
                         case (
                             DataChangeType.SQL_FILE
                             | DataChangeType.PYTHON

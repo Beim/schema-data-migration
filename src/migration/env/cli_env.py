@@ -23,12 +23,14 @@ TABLE_MIGRATION_HISTORY_LOG = common.getenv(
     "TABLE_MIGRATION_HISTORY", default="_migration_history_log", required=False
 )
 
+# TODO*: use ORM in the example
 SAMPLE_PYTHON_FILE = """from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-def run(session: Session):
+def run(session: Session, args: dict) -> int:
     with session.begin():
         session.execute(text("INSERT INTO `testtable` (`id`, `name`) VALUES (1, 'foo.bar');"))
+        return 0
 """  # noqa
 
 SAMPLE_SHELL_FILE = """#!/bin/sh
@@ -140,13 +142,20 @@ async function main() {
   }
 
   try {
-    await Run(AppDataSource)
+    let args = {
+      "SDM_CHECKSUM_MATCH": process.env.SDM_CHECKSUM_MATCH,
+    }
+    const result = await Run(AppDataSource, args)
+    if ("SDM_EXPECTED" in process.env) {
+      if (parseInt(process.env.SDM_EXPECTED) !== result) {
+        throw new Error(`Expected ${process.env.SDM_EXPECTED} but got ${result}`)
+      }
+    }
   } catch (e) {
     console.log("Migration failed")
     console.log(e)
     process.exit(1)
   }
-
   process.exit(0)
 }
 
@@ -166,10 +175,8 @@ class Testtable {
 
 export const Entities = [Testtable]
 
-export const Run = async (datasource: DataSource) => {
-  const t = new Testtable()
-  t.id = 1
-  t.name = "foo.bar"
-  await datasource.manager.save(t)
+export const Run = async (datasource: DataSource, args: { [key: string]: string }): Promise<number> => {
+    await datasource.manager.insert(Testtable, { id: 1, name: "foo" })
+    return 0
 }
 """  # noqa

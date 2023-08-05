@@ -2,7 +2,7 @@
 
 check_dirs := tests src
 
-all: style test
+all: style fast_test
 
 style:
 	black --preview $(check_dirs)
@@ -12,6 +12,10 @@ style:
 test:
 	pip install .
 	python -m pytest ./tests
+
+fast_test:
+	pip install .
+	python -m pytest -m "not slow" ./tests
 
 single_test:
 	pip install .
