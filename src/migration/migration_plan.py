@@ -265,7 +265,7 @@ class MigrationPlan:
         if self._checksum is not None:
             return self._checksum
         sha1 = helper.SHA1Helper()
-        sha1.update_str(self.to_json_str())
+        sha1.update_str(self.to_json_str(sort_keys=True))
         forward = self.change.forward
         backward = self.change.backward
         data_dir = os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR)
@@ -291,8 +291,8 @@ class MigrationPlan:
         self._checksum = sha1.hexdigest()
         return self._checksum
 
-    def to_json_str(self):
-        return json.dumps(self.to_dict(), indent=4)
+    def to_json_str(self, sort_keys: bool = False) -> str:
+        return json.dumps(self.to_dict(), indent=4, sort_keys=sort_keys)
 
     def to_dict_for_log(self):
         obj = self.to_dict()
