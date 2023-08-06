@@ -444,9 +444,10 @@ def run(session: Session):
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-def run(session: Session):
+def run(session: Session, args: dict) -> int:
     with session.begin():
         session.execute(text("DELETE FROM `user` WHERE `id`=3"))
+    return 0
 ```
 
 And add them to the migration plan, now you can migrate!
@@ -512,12 +513,13 @@ class User {
 
 export const Entities = [User]
 
-export const Run = async (datasource: DataSource, args: { [key: string]: string }) => {
+export const Run = async (datasource: DataSource, args: { [key: string]: string }): Promise<number> => {
   const user = new User()
   user.id = 4
   user.name = "foo"
   user.address = "bar"
   await datasource.manager.save(user)
+  return 0
 }
 
 // ./data/seed_by_typescript_rollback.ts
@@ -537,10 +539,11 @@ class User {
 
 export const Entities = [User]
 
-export const Run = async (datasource: DataSource, args: { [key: string]: string }) => {
+export const Run = async (datasource: DataSource, args: { [key: string]: string }): Promise<number> => {
   const userRepository = datasource.manager.getRepository(User)
   const user = await userRepository.findOneBy({id: 4})
   await userRepository.remove(user)
+  return 0
 }
 ```
 
@@ -630,9 +633,50 @@ There're three of migration plans: `schema`, `data` and `repeatable`.
     - It is your responsibility to ensure the same repeatable migration can be applied multiple times. 
     - Repeatable migrations will be rolled back if it's dependency has been rolled back.
 
+## Precheck hook
+
+You can add a precheck hook to a migration plan, which will be executed before the actual change is executed. The precheck hook is useful for repeatable migration, especially when the repeatable migration may fetch external resources that will not be included when calculating the checksum.
+
+Here's an example of how to use the precheck hook:
+
+```json
+{
+    "version": "0002",
+    "name": "insert_test_data",
+    "type": "data",
+    "change": {
+        "forward": {
+            "type": "sql",
+            "sql": "INSERT INTO `user` (`id`, `name`) VALUES (1, 'foo.bar');",
+            "precheck": {
+                "type": "sql",
+                "sql": "SELECT COUNT(*) FROM `user` WHERE `id` = 1;",
+                "expected": 0
+            }
+        }
+    },
+    "dependencies": [
+        {
+            "version": "0001",
+            "name": "new_test_table"
+        }
+    ]
+}
+```
+
+There're 5 types of precheck hook available: `sql`, `sql_file`, `python`, `shell`, `typescript`.
+- For `sql` and `sql_file` types, the expected value is checked against the first returned value from the sql statement. e.g. `SELECT COUNT(*) ...`
+- For `python` and `typescript` types, the expected value is checked against the return value of the `run` function.
+- For `shell` type, the expected value is checked against the return code of the script.
+
+If the precheck hook is set for the repeatable migration, the default checksum behavior will be skipped. The control is handed over to the precheck hook, and a checksum will be passed to it.
+- For `python` and `typescript` types, the checksum is passed as arguments: `args['SDM_CHECKSUM_MATCH']`
+- For `shell` type, the checksum is passed as environment variable: `$SDM_CHECKSUM_MATCH`
+- The feature is not supported for `sql` and `sql_file` because the default behaivour is usually sufficient.
+
 ## Fake migration and rollback
 
-You can also fake run a migration using the --fake flag. This will add the migration to the migrations table without running it. This is useful for migrations created after manual changes have already been made to the database or when migrations have been run externally (e.g. by another tool or application), and you still would like to keep a consistent migration history.
+You can fake run a migration using the --fake flag. This will add the migration to the migrations table without running it. This is useful for migrations created after manual changes have already been made to the database or when migrations have been run externally (e.g. by another tool or application), and you still would like to keep a consistent migration history.
 
 ```bash
 # migrate

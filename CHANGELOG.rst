@@ -53,3 +53,8 @@ Version 0.4.1
 =============
 
 - Fix: repeatable migration is not executed when ignore_after is set
+
+Version 0.5.0
+=============
+
+- Add `precheck` hook to migration plan
