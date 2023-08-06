@@ -23,14 +23,29 @@ TABLE_MIGRATION_HISTORY_LOG = common.getenv(
     "TABLE_MIGRATION_HISTORY", default="_migration_history_log", required=False
 )
 
-# TODO*: use ORM in the example
 SAMPLE_PYTHON_FILE = """from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import Column, String
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+class User(Base):
+    __tablename__ = 'user'
+
+    id = Column(primary_key=True)
+    name = Column(String(255))
 
 def run(session: Session, args: dict) -> int:
-    with session.begin():
-        session.execute(text("INSERT INTO `testtable` (`id`, `name`) VALUES (1, 'foo.bar');"))
-        return 0
+    new_users = [
+        User(id=1, name='foo'),
+        User(id=2, name='bar'),
+    ]
+    for user in new_users:
+        session.merge(user)
+    session.commit()
+    session.close()
+    return 0
 """  # noqa
 
 SAMPLE_SHELL_FILE = """#!/bin/sh
