@@ -361,7 +361,28 @@ class MigrationPlanManager:
                     else:
                         plans.append(plan)
         sorted_plans = MigrationPlanManager._sort_plans(plans)
+        MigrationPlanManager._check_dependency_of_repeatable_plans(
+            sorted_plans, repeatable_plans
+        )
         return sorted_plans, repeatable_plans
+
+    @staticmethod
+    def _check_dependency_of_repeatable_plans(
+        versioned_plans: List[MigrationPlan],
+        repeatable_plans: List[MigrationPlan],
+    ) -> None:
+        if not repeatable_plans:
+            return
+        plan_map: Dict[MigrationSignature, MigrationPlan] = {}
+        for p in versioned_plans:
+            plan_map[p.sig()] = p
+
+        for p in repeatable_plans:
+            if len(p.dependencies) == 0:
+                continue
+            dep = p.dependencies[0]
+            if dep not in plan_map:
+                raise err.IntegrityError(f"Cannot find dependency {dep} for {p}")
 
     @staticmethod
     def _sort_plans(plans: List[MigrationPlan]) -> List[MigrationPlan]:
@@ -391,7 +412,7 @@ class MigrationPlanManager:
             # the other dependencies will be ignored
             dep = p.dependencies[0]
             if dep not in plan_map:
-                raise err.IntegrityError(f"Cannot find dependency {dep}")
+                raise err.IntegrityError(f"Cannot find dependency {dep} for {p}")
             G.add_edge(dep, p.sig())
 
         # Check for cycles in the graph
