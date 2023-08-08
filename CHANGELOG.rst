@@ -58,3 +58,8 @@ Version 0.5.0
 =============
 
 - Add `precheck` hook to migration plan
+
+Version 0.5.1
+=============
+
+- Add dependency check for repeatable migration

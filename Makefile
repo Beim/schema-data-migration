@@ -26,5 +26,5 @@ collect:
 	python -m pytest --collect-only ./tests
 
 build-image:
-	sudo docker build -t beim/schema-data-migration:0.5.0 .
+	sudo docker build -t beim/schema-data-migration:0.5.1 .
 	sudo docker build -t beim/schema-data-migration:latest .
