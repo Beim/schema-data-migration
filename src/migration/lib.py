@@ -235,12 +235,13 @@ class CLIMigrator(Migrator):
                 "PORT": section["port"],
                 "USER": section["user"],
                 "SCHEMA": section["schema"],
+                consts.ENV_SDM_DATA_DIR: cli_env.SDM_DATA_DIR,
             }
         )
         if expected is not None:
-            env["SDM_EXPECTED"] = str(expected)
+            env[consts.ENV_SDM_EXPECTED] = str(expected)
         if checksum_match is not None:
-            env["SDM_CHECKSUM_MATCH"] = "1" if checksum_match else "0"
+            env[consts.ENV_SDM_CHECKSUM_MATCH] = "1" if checksum_match else "0"
         subprocess.check_call(
             shlex.split(cmd),
             cwd=cli_env.MIGRATION_CWD,
@@ -296,12 +297,13 @@ class CLIMigrator(Migrator):
                     "PORT": section["port"],
                     "USER": section["user"],
                     "SCHEMA": section["schema"],
+                    consts.ENV_SDM_DATA_DIR: cli_env.SDM_DATA_DIR,
                 }
             )
             if expected is not None:
-                env["SDM_EXPECTED"] = str(expected)
+                env[consts.ENV_SDM_EXPECTED] = str(expected)
             if checksum_match is not None:
-                env["SDM_CHECKSUM_MATCH"] = "1" if checksum_match else "0"
+                env[consts.ENV_SDM_CHECKSUM_MATCH] = "1" if checksum_match else "0"
 
             # run js file
             subprocess.check_call(
@@ -333,9 +335,11 @@ class CLIMigrator(Migrator):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         session = build_session_from_env(args.environment, echo=cli_env.ALLOW_ECHO_SQL)
-        obj = {}
+        obj = {
+            consts.ENV_SDM_DATA_DIR: cli_env.SDM_DATA_DIR,
+        }
         if checksum_match is not None:
-            obj["SDM_CHECKSUM_MATCH"] = "1" if checksum_match else "0"
+            obj[consts.ENV_SDM_CHECKSUM_MATCH] = "1" if checksum_match else "0"
         return module.run(session, args=obj)
 
     def migrate_data_sql_file(self, sql_file: str, args: Namespace):

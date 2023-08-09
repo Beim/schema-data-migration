@@ -1,3 +1,5 @@
+import os
+
 from . import common
 
 MIGRATION_CWD = common.getenv("MIGRATION_CWD", default=".", required=False)
@@ -15,6 +17,8 @@ DATA_DIR = "data"
 MIGRATION_PLAN_DIR = "migration_plan"
 SCHEMA_STORE_DIR = ".schema_store"
 ENV_INI_FILE = "env.ini"
+
+SDM_DATA_DIR = os.path.abspath(os.path.join(MIGRATION_CWD, DATA_DIR))
 
 TABLE_MIGRATION_HISTORY = common.getenv(
     "TABLE_MIGRATION_HISTORY", default="_migration_history", required=False
@@ -166,6 +170,7 @@ async function main() {
   try {
     let args = {
       "SDM_CHECKSUM_MATCH": process.env.SDM_CHECKSUM_MATCH,
+      "SDM_DATA_DIR": process.env.SDM_DATA_DIR,
     }
     const result = await Run(AppDataSource, args)
     if ("SDM_EXPECTED" in process.env) {
