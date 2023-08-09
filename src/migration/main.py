@@ -4,6 +4,8 @@ import os
 import sys
 from enum import StrEnum
 
+from migration import __version__
+
 from . import consts
 from .env import log_env
 from .lib import CLI
@@ -402,6 +404,11 @@ def parse_args(args):
             "Schema-data-migration is a database migration tool that supports MySQL and"
             " MariaDB.\nIt can manage both schema and data migration."
         )
+    )
+    parent_parser.add_argument(
+        "--version",
+        action="version",
+        version=f"sdm {__version__}",
     )
     subparsers = parent_parser.add_subparsers(
         title="command", dest="command", required=True
