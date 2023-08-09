@@ -63,3 +63,9 @@ Version 0.5.1
 =============
 
 - Add dependency check for repeatable migration
+
+Version 0.5.2
+=============
+
+- Add "--version" flag to print version
+- Pass "SDM_DATA_DIR" as argument to migration script
