@@ -120,9 +120,8 @@ class DataForward:
 
     def to_str_for_print(self) -> str:
         if self.type == DataChangeType.SQL:
-            if len(self.sql) <= 40:  # to match the length if index sha1
-                return self.sql
-            return self.sql[:37] + "..."
+            # to match the length if index sha1
+            return helper.truncate_str(self.sql, max_len=40)
         elif (
             self.type == DataChangeType.SQL_FILE
             or self.type == DataChangeType.PYTHON

@@ -34,6 +34,12 @@ def sha1_encode(str_list: List[str]):
     return hex_digest
 
 
+def truncate_str(s: str, max_len: int = 40) -> str:
+    if len(s) <= max_len:
+        return s
+    return s[:max_len] + "..."
+
+
 class TestPlanGenerator:
     def __init__(self, graph: nx.DiGraph):
         # read migration plans

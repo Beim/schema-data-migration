@@ -347,7 +347,10 @@ class CLIMigrator(Migrator):
         session = build_session_from_env(args.environment, echo=cli_env.ALLOW_ECHO_SQL)
         with session.begin():
             result = session.execute(text(sql))
-            logger.info(f"migrate data, sql={sql}, result.rowcount={result.rowcount}")
+            logger.info(
+                f"Migrated SQL={helper.truncate_str(sql, max_len=200)},"
+                f" result.rowcount={result.rowcount}"
+            )
 
     def check_condition_sql_file(self, sql_file: str, expected: int, args: Namespace):
         with open(os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, sql_file)) as f:
@@ -358,7 +361,10 @@ class CLIMigrator(Migrator):
         session = build_session_from_env(args.environment, echo=cli_env.ALLOW_ECHO_SQL)
         with session.begin():
             result = session.execute(text(sql)).one_or_none()
-            logger.info(f"check condition, sql={sql}, result={result}")
+            logger.info(
+                f"Check condition, SQL={helper.truncate_str(sql, max_len=200)},"
+                f" result={result}"
+            )
             return result[0] == expected
 
     def move_schema_to(self, sha1: str, args: Namespace):
