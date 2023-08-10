@@ -85,14 +85,6 @@ def files_under_dir(dir_path: str, ends_with: str) -> Dict[str, str]:
 
 
 class Migrator:
-    def forward(self, migration_plan: mp.MigrationPlan, args: Namespace):
-        raise NotImplementedError
-
-    def backward(self, migration_plan: mp.MigrationPlan, args: Namespace):
-        raise NotImplementedError
-
-
-class CLIMigrator(Migrator):
     def check_condition(
         self,
         condition: mp.ConditionCheck,
@@ -399,7 +391,7 @@ class CLIMigrator(Migrator):
 
 
 class CLI:
-    def __init__(self, args: Namespace = None, migrator: Migrator = CLIMigrator()):
+    def __init__(self, args: Namespace = None, migrator: Migrator = Migrator()):
         self.args = args
         self.mpm: mp.MigrationPlanManager = None
         self.dao: hist_dao.MigrationHistoryDAO = None

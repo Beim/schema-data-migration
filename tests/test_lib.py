@@ -10,7 +10,7 @@ from migration import consts, err, helper
 from migration import migration_plan as mp
 from migration.db import model as dbmodel
 from migration.env import cli_env
-from migration.lib import CLI, Migrator
+from migration.lib import CLI
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +22,6 @@ def sort_plan_by_version():
     mp._sort_migration_plans_by = mp.SortAlg.VERSION
     yield
     mp._sort_migration_plans_by = mp._default_sort_migration_plans_by
-
-
-class FakeMigrator(Migrator):
-    def forward(self, migration_plan: mp.MigrationPlan, args: Namespace):
-        pass
-
-    def backward(self, migration_plan: mp.MigrationPlan, args: Namespace):
-        pass
 
 
 def make_args(d: dict) -> Namespace:
