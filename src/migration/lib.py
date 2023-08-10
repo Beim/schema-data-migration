@@ -49,7 +49,7 @@ def parse_env_ini() -> configparser.ConfigParser:
 def get_env_ini_section(env: str) -> configparser.SectionProxy:
     cfg = parse_env_ini()
     if not cfg.has_section(env):
-        raise Exception(f"env {env} not found in {cli_env.ENV_INI_FILE}")
+        raise Exception(f"Environment [{env}] not found in configuration")
     return cfg[env]
 
 
@@ -169,7 +169,7 @@ class CLIMigrator(Migrator):
         logger.info(f"Rollbacking {migration_plan}")
         backward = migration_plan.change.backward
         if backward is None:
-            logger.info(f"no backward change for {migration_plan}")
+            logger.info(f"No backward change for {migration_plan}")
             return
 
         # precheck
@@ -423,7 +423,7 @@ class CLI:
     ):
         if len(migration_histories) > self.mpm.count():
             raise Exception(
-                "unexpected migration history,"
+                "Unexpected migration history,"
                 f" len(migration_histories)={len(migration_histories)},"
                 f" len(migration_plans)={self.mpm.count()}"
             )
@@ -438,13 +438,13 @@ class CLI:
                     ):
                         continue
                 raise Exception(
-                    f"migration is not successful, ver={hist.ver}, name={hist.name}"
+                    f"Migration is not successful, version={hist.ver}, name={hist.name}"
                 )
             plan = self.mpm.get_plan_by_index(idx)
             if not hist.can_match(plan.version, plan.name, plan.get_checksum()):
                 raise Exception(
-                    f"unexpected migration history, ver={hist.ver}, name={hist.name},"
-                    f" checksum={hist.checksum}"
+                    f"Unexpected migration history, version={hist.ver},"
+                    f" name={hist.name}, checksum={hist.checksum}"
                 )
 
     def _get_and_check_versioned_migration_histories(
@@ -471,7 +471,7 @@ class CLI:
                 len(migration_histories) == 0
                 or migration_histories[-1].state == model.MigrationState.SUCCESSFUL
             ):
-                logger.info("no need to fix migration")
+                logger.info("No need to fix migration")
                 return
             target_plan = self.mpm.get_plan_by_index(len(migration_histories) - 1)
             if forward:
@@ -560,18 +560,19 @@ class CLI:
             with dao.session.begin():
                 latest_hist = dao.get_latest_versioned()
                 if latest_hist is None:
-                    raise Exception("unexpected migration history, latest_hist is None")
+                    raise Exception("Latest migration history not found")
                 if not latest_hist.can_match(
                     new_plans[0].version, new_plans[0].name, new_plans[0].get_checksum()
                 ):
                     raise Exception(
-                        f"unexpected migration history, ver={latest_hist.ver},"
-                        f" name={latest_hist.name}"
+                        f"Unexpected migration history, version={latest_hist.ver},"
+                        f" name={latest_hist.name}, checksum={latest_hist.checksum}"
                     )
                 if latest_hist.state != model.MigrationState.PROCESSING:
                     raise Exception(
-                        f"unexpected migration history state, ver={latest_hist.ver},"
-                        f" name={latest_hist.name}, state={latest_hist.state}"
+                        "Unexpected migration history state,"
+                        f" version={latest_hist.ver}, name={latest_hist.name},"
+                        f" state={latest_hist.state}"
                     )
                 dao.update_succ(new_plans[0], operator=operator, fake=fake)
                 applied_plans.append(new_plans[0])
@@ -594,13 +595,13 @@ class CLI:
         operator = self.args.operator if "operator" in self.args else ""
 
         if dry_run:
-            logger.info("running in dry run mode, no migration will be executed")
+            logger.info("Running in dry run mode, no migration will be executed")
 
         self.read_migration_plans()
         self._check_integrity()
 
         logger.debug(
-            f"migrate options: ver={ver}, name={name}, fake={fake}, dry_run={dry_run}"
+            f"Migrate options: ver={ver}, name={name}, fake={fake}, dry_run={dry_run}"
         )
 
         # versioned migration
@@ -640,7 +641,7 @@ class CLI:
 
         to_execute_plans = self._get_to_execute_repeatable_plans(applied_histories)
         if len(to_execute_plans) == 0:
-            logger.debug("no valid repeatable migration to execute")
+            logger.debug("No valid repeatable migration to execute")
             return []
 
         dao = self.dao
@@ -691,7 +692,7 @@ class CLI:
                 # check if ignore_sig is in applied_histories
                 if any(ap.match(ignore_sig) for ap in applied_plans):
                     logger.debug(
-                        "repeatable migration %s is not executed because ignore_after"
+                        "Repeatable migration %s is not executed because ignore_after"
                         " %s is applied",
                         p,
                         ignore_sig,
@@ -710,7 +711,7 @@ class CLI:
                 )
             ):
                 logger.debug(
-                    "repeatable migration %s is not executed because it has been"
+                    "Repeatable migration %s is not executed because it has been"
                     " executed",
                     p,
                 )
@@ -772,7 +773,7 @@ class CLI:
             latest_migration_plan_index = len(migration_histories) - 1
 
             if target_migration_plan_index > latest_migration_plan_index:
-                raise Exception("target migration plan is not applied yet")
+                raise Exception("Target migration plan is not applied yet")
             elif target_migration_plan_index == latest_migration_plan_index:
                 return
 
@@ -824,20 +825,21 @@ class CLI:
             with dao.session.begin():
                 latest_hist = dao.get_latest_versioned()
                 if latest_hist is None:
-                    raise Exception("unexpected migration history, latest_hist is None")
+                    raise Exception("Latest migration history not found")
                 if not latest_hist.can_match(
                     to_rollback_versioned_plans[-1].version,
                     to_rollback_versioned_plans[-1].name,
                     to_rollback_versioned_plans[-1].get_checksum(),
                 ):
                     raise Exception(
-                        f"unexpected migration history, ver={latest_hist.ver},"
-                        f" name={latest_hist.name}"
+                        f"Unexpected migration history, version={latest_hist.ver},"
+                        f" name={latest_hist.name}, checksum={latest_hist.checksum}"
                     )
                 if latest_hist.state != model.MigrationState.ROLLBACKING:
                     raise Exception(
-                        f"unexpected migration history state, ver={latest_hist.ver},"
-                        f" name={latest_hist.name}, state={latest_hist.state}"
+                        "Unexpected migration history state,"
+                        f" version={latest_hist.ver}, name={latest_hist.name},"
+                        f" state={latest_hist.state}"
                     )
                 dao.delete(
                     to_rollback_versioned_plans[-1], operator=operator, fake=fake
@@ -1035,10 +1037,12 @@ class CLI:
         author = self.args.author if "author" in self.args else ""
         data_change_type = self.args.type
         if not mp.DataChangeType.is_valid(data_change_type):
-            raise Exception(f"invalid type {data_change_type}")
+            raise Exception(f"Invalid type {data_change_type}")
         self.read_migration_plans()
         if self.mpm.count() == 0:
-            raise Exception("no migration plan found, run migration init first")
+            raise Exception(
+                "Initial migration plan is not found, please run init command"
+            )
         next_plan = mp.MigrationPlan(
             version=mp.RepeatableVersion,
             name=name,
@@ -1077,10 +1081,12 @@ class CLI:
         author = self.args.author if "author" in self.args else ""
         data_change_type = self.args.type
         if not mp.DataChangeType.is_valid(data_change_type):
-            raise Exception(f"invalid type {data_change_type}")
+            raise Exception(f"Invalid type {data_change_type}")
         self.read_migration_plans()
         if self.mpm.count() == 0:
-            raise Exception("no migration plan found, run migration init first")
+            raise Exception(
+                "Initial migration plan is not found, please run init command"
+            )
         latest_plan = self.mpm.get_latest_plan()
         next_plan = mp.MigrationPlan(
             version=self.bump_version(latest_plan.version),
@@ -1126,14 +1132,16 @@ class CLI:
         author = self.args.author if "author" in self.args else ""
         self.read_migration_plans()
         if self.mpm.count() == 0:
-            raise Exception("no migration plan found, run migration init first")
+            raise Exception(
+                "Initial migration plan is not found, please run init command"
+            )
         latest_plan = self.mpm.get_latest_plan()
         latest_schema_plan = self.mpm.get_latest_plan(mp.Type.SCHEMA)
 
         latest_schema_index_sha1 = latest_schema_plan.change.forward.id
         sql_files, index_sha1, index_content = self.read_sql_files()
         if latest_schema_index_sha1 == index_sha1:
-            logger.info("no schema change")
+            logger.info("No schema change")
             return
         self.write_schema_store(index_sha1, index_content)
         for f in sql_files:
@@ -1246,8 +1254,7 @@ class CLI:
 
         else:
             raise Exception(
-                f"invalid argument type, {env_or_version} is neither environment nor"
-                " version"
+                f"Invalid argument, {env_or_version} is neither environment nor version"
             )
 
     def diff(self):
@@ -1284,7 +1291,7 @@ class CLI:
                     has_diff = True
 
             if has_diff:
-                raise Exception(f"difference found between {left} and {right}")
+                raise Exception(f"Difference found between {left} and {right}")
 
     def dump_schema(
         self,
@@ -1320,7 +1327,7 @@ class CLI:
                 )
 
             if target_plan.type != mp.Type.SCHEMA:
-                raise Exception(f"not schema migration plan, version={diff_arg}")
+                raise Exception(f"Not schema migration plan, version={diff_arg}")
             index_sha1 = target_plan.change.forward.id
             self.copy_schema_by_index(index_sha1, dump_dir_path)
             return
@@ -1328,7 +1335,7 @@ class CLI:
             env_ini = parse_env_ini()  # env.ini is just a symlink to .skeema
             env = diff_arg
             if not env_ini.has_section(env):
-                raise Exception(f"environment not found, name={env}")
+                raise Exception(f"Environment not found, name={env}")
             skeema_file_path = os.path.join(
                 cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, ".skeema"
             )
