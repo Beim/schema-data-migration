@@ -372,9 +372,7 @@ class CLIMigrator(Migrator):
             return result[0] == expected
 
     def move_schema_to(self, sha1: str, args: Namespace):
-        index_file = os.path.join(
-            cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, sha1[:2], sha1[2:]
-        )
+        index_file = helper.sha1_to_path(sha1)
         with open(index_file, "r") as f:
             lines = f.readlines()
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -385,13 +383,9 @@ class CLIMigrator(Migrator):
             )
             for line in lines:
                 [sha1, sql_filename] = line.split(":")
+                sql_filepath = helper.sha1_to_path(sha1)
                 shutil.copy(
-                    os.path.join(
-                        cli_env.MIGRATION_CWD,
-                        cli_env.SCHEMA_STORE_DIR,
-                        sha1[:2],
-                        sha1[2:],
-                    ),  # sql_filepath
+                    sql_filepath,
                     os.path.join(temp_dir, cli_env.SCHEMA_DIR, sql_filename.strip()),
                 )
             skeema_args = [
@@ -1164,15 +1158,7 @@ class CLI:
         return new_plan.save()
 
     def write_schema_store(self, sha1: str, content: str):
-        folder = os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, sha1[:2])
-        filename = sha1[2:]
-        # if file exist, return directly, otherwise write file
-        filepath = os.path.join(folder, filename)
-        logger.debug("Wrote schema store file to %s", filepath)
-        if os.path.exists(filepath):
-            return
-        with open(filepath, "w") as f:
-            f.write(content)
+        helper.write_sha1_file(sha1, content)
 
     def sha1_encode(self, str_list: List[str]):
         return helper.sha1_encode(str_list=str_list)
@@ -1355,21 +1341,10 @@ class CLI:
         else:
             return mp.DiffItemType.ENVIRONMENT
 
-    # TODO refactor to use this method
-    def _schema_store_file_full_path(self, sha1: str) -> str:
-        return os.path.join(
-            cli_env.MIGRATION_CWD,
-            cli_env.SCHEMA_STORE_DIR,
-            sha1[:2],
-            sha1[2:],
-        )
-
     def read_schema_index(
         self, sha1: str, check_sha: bool = False
     ) -> List[Tuple[str, str]]:
-        index_file = os.path.join(
-            cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, sha1[:2], sha1[2:]
-        )
+        index_file = helper.sha1_to_path(sha1)
         with open(index_file, "r") as f:
             lines = f.readlines()
         if check_sha:
@@ -1385,13 +1360,9 @@ class CLI:
 
     def copy_schema_by_index(self, sha1: str, temp_dir: str):
         for sha1, sql_filename in self.read_schema_index(sha1):
+            sql_filepath = helper.sha1_to_path(sha1)
             shutil.copy(
-                os.path.join(
-                    cli_env.MIGRATION_CWD,
-                    cli_env.SCHEMA_STORE_DIR,
-                    sha1[:2],
-                    sha1[2:],
-                ),  # sql_filepath
+                sql_filepath,
                 os.path.join(temp_dir, sql_filename),
             )
 
@@ -1458,7 +1429,6 @@ class CLI:
     #   - For schema migrations, the index file and linked SQL file exist.
     #       If not in fast mode, it also checks that the SHA1 is correct.
     #   - For data migrations, check the sql is not empty or the file exist.
-    # TODO: Implement advanced checks to verify the SQL syntax.
     def check_integrity(self):
         fast = self.args.fast if "fast" in self.args else False
         self.read_migration_plans()
@@ -1508,16 +1478,11 @@ class CLI:
         except FileNotFoundError:
             raise err.IntegrityError(
                 f"index file not found, {plan}, missing file:"
-                f" {self._schema_store_file_full_path(index_sha1)}"
+                f" {helper.sha1_to_path(index_sha1)}"
             )
         # check sql file exist
         for sql_sha1, sql_filename in sql_files:
-            sql_file_path = os.path.join(
-                cli_env.MIGRATION_CWD,
-                cli_env.SCHEMA_STORE_DIR,
-                sql_sha1[:2],
-                sql_sha1[2:],
-            )
+            sql_file_path = helper.sha1_to_path(sql_sha1)
             if not os.path.exists(sql_file_path):
                 raise err.IntegrityError(
                     f"sql file not found, {plan},"

@@ -6,7 +6,7 @@ from typing import List
 import pytest
 from sqlalchemy import text
 
-from migration import consts, err
+from migration import consts, err, helper
 from migration import migration_plan as mp
 from migration.db import model as dbmodel
 from migration.env import cli_env
@@ -349,11 +349,10 @@ def test_integrity_check_for_schema(sort_plan_by_version):
 
     plan = cli.read_migration_plans().get_latest_plan()
     index_sha1 = plan.change.forward.id
+    # break integrity by removing sql file
     sql_files = cli.read_schema_index(index_sha1)
     for sql_sha1, _ in sql_files:
-        sql_file_path = os.path.join(
-            cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, sql_sha1[:2], sql_sha1[2:]
-        )
+        sql_file_path = helper.sha1_to_path(sql_sha1)
         os.remove(sql_file_path)
         break
 

@@ -1,8 +1,14 @@
 import hashlib
+import logging
+import os
 import random
 from typing import List
 
 import networkx as nx
+
+from .env import cli_env
+
+logger = logging.getLogger(__name__)
 
 
 class SHA1Helper:
@@ -32,6 +38,27 @@ def sha1_encode(str_list: List[str]):
     # get the hexadecimal representation of the hash
     hex_digest = sha1.hexdigest()
     return hex_digest
+
+
+def sha1_to_path(sha1: str) -> str:
+    return os.path.join(
+        cli_env.MIGRATION_CWD,
+        cli_env.SCHEMA_STORE_DIR,
+        sha1[:2],
+        sha1[2:],
+    )
+
+
+def write_sha1_file(sha1: str, content: str):
+    folder = os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR, sha1[:2])
+    filename = sha1[2:]
+    # if file exist, return directly, otherwise write file
+    filepath = os.path.join(folder, filename)
+    logger.debug("Wrote schema store file to %s", filepath)
+    if os.path.exists(filepath):
+        return
+    with open(filepath, "w") as f:
+        f.write(content)
 
 
 def truncate_str(s: str, max_len: int = 40) -> str:
