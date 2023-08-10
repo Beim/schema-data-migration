@@ -69,3 +69,8 @@ Version 0.5.2
 
 - Add "--version" flag to print version
 - Pass "SDM_DATA_DIR" as argument to migration script
+
+Version 0.5.3
+=============
+
+- Refactor code
