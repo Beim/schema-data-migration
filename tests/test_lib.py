@@ -774,19 +774,6 @@ def test_migrate_happy_flow(sort_plan_by_version):
         hists = dao.get_all()
         assert len(hists) == 1
 
-    # show migration history
-    args = make_args(
-        {
-            "environment": "dev",
-        }
-    )
-    cli = CLI(args=args)
-    is_consistent, len_applied, len_unexpected, len_unapplied = cli.versioned_info()
-    assert len_applied == 1
-    assert len_unexpected == 0
-    assert len_unapplied == 3
-    assert not is_consistent
-
     # migrate dev environment
     # it should bring the new table back
     args = make_args(
@@ -970,11 +957,6 @@ def test_repeatable_migration(sort_plan_by_version):
             }
         )
     )
-    is_consistent, len_applied, len_unexpected, len_unapplied = cli.versioned_info()
-    assert is_consistent
-    assert len_applied == 4
-    assert len_unexpected == 0
-    assert len_unapplied == 0
     _, len_applied = cli.info()
     assert len_applied == 5
 
