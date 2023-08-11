@@ -248,4 +248,5 @@ The first command will show you which files would be deleted without actually de
 ## Future plans
 
 - [x] Support conditional execution of schema and data migration
+- [ ] Add rollbackable into info command
 - [ ] Support database/table sharding

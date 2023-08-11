@@ -11,92 +11,29 @@ from migration import migration_plan as mp
 from migration.db import model as dbmodel
 from migration.env import cli_env
 from migration.lib import CLI
+from tests import testcommon as tc
 
 logger = logging.getLogger(__name__)
 
 cli_env.ALLOW_UNSAFE = 1
 
 
-@pytest.fixture
-def sort_plan_by_version():
-    mp._sort_migration_plans_by = mp.SortAlg.VERSION
-    yield
-    mp._sort_migration_plans_by = mp._default_sort_migration_plans_by
-
-
 def make_args(d: dict) -> Namespace:
-    return Namespace(**d)
+    return tc.make_args(d)
 
 
 def init_workspace():
-    schema = "migration_test"
-    args = make_args(
-        {
-            "host": "127.0.0.1",
-            "port": 3306,
-            "user": "root",
-            "schema": schema,
-        }
-    )
-    cli = CLI(args=args)
-    cli.clean_cwd()
-    cli.init()
-
-    # add dev environment
-    cli = CLI(
-        args=make_args(
-            {
-                "environment": "dev",
-                "host": "127.0.0.1",
-                "port": 3307,
-                "user": "root",
-            }
-        )
-    )
-    cli.add_environment()
-
-    # migrate dev environment
-    args = make_args(
-        {
-            "environment": "dev",
-        }
-    )
-    cli = CLI(args=args)
-    cli._clear()
-    cli.migrate()
-
-    dao = cli.dao
-    with dao.session.begin():
-        hists = dao.get_all()
-        assert len(hists) == 1
+    return tc.init_workspace()
 
 
 def make_schema_migration_plan(
     name: str = "new_test_table", id_primary_key: bool = True
 ) -> CLI:
-    with open(
-        os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, "testtable.sql"), "w"
-    ) as f:
-        if id_primary_key:
-            f.write("create table testtable (id int primary key, name varchar(255));")
-        else:
-            f.write("create table testtable (id int, name varchar(255));")
-    args = make_args({"name": name})
-    cli = CLI(args=args)
-    cli.make_schema_migration()
-    return cli
+    return tc.make_schema_migration_plan(name, id_primary_key)
 
 
-def migrate_dev():
-    cli = CLI(
-        args=make_args(
-            {
-                "environment": "dev",
-            }
-        )
-    )
-    cli.migrate()
-    return cli
+def migrate_dev() -> CLI:
+    return tc.migrate_dev()
 
 
 def test_migrate_shell_file(sort_plan_by_version):
@@ -226,77 +163,7 @@ def test_migrate_sql_file(sort_plan_by_version):
 
 
 def make_data_migration_plan(forward_sql: str, backward_sql: str) -> mp.MigrationPlan:
-    args = make_args(
-        {
-            "name": "insert_test_data",
-            "type": "sql",
-        }
-    )
-    cli = CLI(args=args)
-    cli.make_data_migration()
-    data_plan = cli.read_migration_plans().get_plan_by_index(-1)
-    data_plan.change.forward.sql = forward_sql
-    data_plan.change.backward = mp.DataBackward(
-        type="sql",
-        sql=backward_sql,
-    )
-    data_plan.save()
-    return data_plan
-
-
-def test_fake_migrate(sort_plan_by_version):
-    logger.info("=== start === test_fake_migrate")
-    init_workspace()
-
-    make_schema_migration_plan()
-
-    make_data_migration_plan(
-        "insert into testtable (id, name) values (1, 'foo.bar');",
-        "delete from testtable where id = 1;",
-    )
-
-    args = make_args({"environment": "dev", "fake": True})
-    cli = CLI(args=args)
-    cli.migrate()
-
-    dao = cli.dao
-    with dao.session.begin():
-        hists = dao.get_all()
-        assert len(hists) == 3
-        row = dao.session.execute(text("select name from testtable;")).one_or_none()
-        assert row is None
-
-
-def test_fake_rollback(sort_plan_by_version):
-    logger.info("=== start === test_fake_rollback")
-    init_workspace()
-
-    make_schema_migration_plan()
-
-    make_data_migration_plan(
-        "insert into testtable (id, name) values (1, 'foo.bar');",
-        "delete from testtable where id = 1;",
-    )
-
-    cli = migrate_dev()
-
-    dao = cli.dao
-    with dao.session.begin():
-        hists = dao.get_all()
-        assert len(hists) == 3
-        row = dao.session.execute(text("select name from testtable;")).one()
-        assert row[0] == "foo.bar"
-
-    args = make_args({"environment": "dev", "fake": True, "version": "0000"})
-    cli = CLI(args=args)
-    cli.rollback()
-
-    dao = cli.dao
-    with dao.session.begin():
-        hists = dao.get_all()
-        assert len(hists) == 1
-        row = dao.session.execute(text("select name from testtable;")).one()
-        assert row[0] == "foo.bar"
+    return tc.make_data_migration_plan(forward_sql, backward_sql)
 
 
 def test_fix_migration(sort_plan_by_version):
@@ -866,26 +733,11 @@ def test_repeatable_migration(sort_plan_by_version):
         "delete from testtable where id = 1;",
     )
 
-    # add repeatable migration plan R_seed_data
-    cli = CLI(
-        args=make_args(
-            {
-                "name": "seed_data",
-                "type": "sql",
-            }
-        )
+    _, repeat_plan = tc.make_repeatable_migration_plan(
+        name="seed_data",
+        forward_sql="insert into testtable (id, name) values (100, 'foooooo');",
+        dependencies=[mp.MigrationSignature(version="0001", name="new_test_table")],
     )
-    cli.make_repeatable_migration()
-    repeat_plan: mp.MigrationPlan = cli.read_migration_plans().get_repeatable_plan(
-        "seed_data"
-    )
-    repeat_plan.change.forward.sql = (
-        "insert into testtable (id, name) values (100, 'foooooo');"
-    )
-    repeat_plan.dependencies = [
-        mp.MigrationSignature(version="0001", name="new_test_table"),
-    ]
-    repeat_plan.save()
 
     # run migrate, should execute the repeatable migration
     migrate_and_check(len_hists=4, len_row=2)
@@ -951,29 +803,17 @@ def test_repeatable_migration(sort_plan_by_version):
     _, len_applied = cli.info()
     assert len_applied == 5
 
-    # add newe repeatable migration plan R_seed_addr_data
-    cli = CLI(
-        args=make_args(
-            {
-                "name": "seed_addr_data",
-                "type": "sql",
-            }
-        )
+    # add new repeatable migration plan R_seed_addr_data
+    tc.make_repeatable_migration_plan(
+        name="seed_addr_data",
+        forward_sql=(
+            "insert into testtable (id, addr, name) values (200, 'Mars', 'foooooo');"
+        ),
+        backward_sql="delete from testtable where id = 200;",
+        dependencies=[
+            mp.MigrationSignature(version="0003", name="add_addr_to_test_table")
+        ],
     )
-    cli.make_repeatable_migration()
-    repeat_plan: mp.MigrationPlan = cli.read_migration_plans().get_repeatable_plan(
-        "seed_addr_data"
-    )
-    repeat_plan.change.forward.sql = (
-        "insert into testtable (id, addr, name) values (200, 'Mars', 'foooooo');"
-    )
-    repeat_plan.change.backward = mp.DataBackward(
-        type="sql", sql="delete from testtable where id = 200;"
-    )
-    repeat_plan.dependencies = [
-        mp.MigrationSignature(version="0003", name="add_addr_to_test_table"),
-    ]
-    repeat_plan.save()
 
     # run migrate, should execute the repeatable migration
     migrate_and_check(len_hists=6, len_row=4)

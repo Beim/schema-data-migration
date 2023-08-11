@@ -74,3 +74,8 @@ Version 0.5.3
 =============
 
 - Refactor code
+
+Version 0.5.4
+=============
+
+- Repeatable migration will not be executed if fake flag is set

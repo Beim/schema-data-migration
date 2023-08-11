@@ -614,6 +614,10 @@ class CLI:
         dry_run: bool,
         operator: str = "",
     ) -> List[mp.MigrationPlan]:
+        if fake:
+            # no need to execute repeatable migration in fake mode
+            return []
+
         if dry_run:
             # since it's dry_run, assume the target version is the latest version
             if ver is not None:
@@ -645,8 +649,7 @@ class CLI:
                     dao.update_processing(plan, operator=operator, fake=fake)
                 dao.commit()
             # execute the migration
-            if not fake:
-                self.migrator.forward(plan, self.args)
+            self.migrator.forward(plan, self.args)
 
             with dao.session.begin():
                 dao.update_succ(plan, operator=operator, fake=fake)
