@@ -1,9 +1,11 @@
 import logging
 
-from . import testcommon as tc
 import pytest
 
+from . import testcommon as tc
+
 logger = logging.getLogger(__name__)
+
 
 def test_pull(sort_plan_by_version):
     logger.info("=== start === test_pull")
@@ -15,9 +17,6 @@ def test_pull(sort_plan_by_version):
     cli = tc.make_cli({"left": "dev", "right": "dev"})
     cli.diff()
 
-    
     cli = tc.make_cli({"left": "0", "right": "dev"})
     with pytest.raises(Exception):
         cli.diff()
-
-

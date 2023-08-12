@@ -1,4 +1,3 @@
-import collections
 import configparser
 import importlib.util
 import json
