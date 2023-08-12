@@ -89,3 +89,8 @@ Version 0.5.6
 =============
 
 - Add unittest github action
+
+Version 0.5.7
+=============
+
+- Add `rollbackable` column in `info` command output

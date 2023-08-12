@@ -1174,12 +1174,30 @@ class CLI:
         dao = self.build_dao()
         hist_list = dao.get_all_dto()
 
+        def get_rollbackable(hist: model.MigrationHistoryDTO) -> str:
+            match hist.type:
+                case mp.Type.SCHEMA | mp.Type.DATA:
+                    plan, _ = self.mpm.must_get_plan_by_signature(
+                        mp.MigrationSignature(
+                            version=hist.ver,
+                            name=hist.name,
+                        )
+                    )
+                case mp.Type.REPEATABLE:
+                    plan = self.mpm.must_get_repeatable_plan_by_signature(
+                        mp.MigrationSignature(version=hist.ver, name=hist.name)
+                    )
+                case _:
+                    return "false"
+            return "true" if plan.is_rollbackable() else "false"
+
         output = [
             [
                 hist.ver,
                 hist.name,
                 hist.type,
                 hist.state.name,
+                get_rollbackable(hist),
                 hist.created,
                 hist.updated,
             ]
@@ -1188,7 +1206,7 @@ class CLI:
         self._print_info_as_table(
             "Migration history:",
             output,
-            ["ver", "name", "type", "state", "created", "updated"],
+            ["ver", "name", "type", "state", "rollbackable", "created", "updated"],
         )
 
         return True, len(hist_list)

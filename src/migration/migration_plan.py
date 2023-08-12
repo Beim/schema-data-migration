@@ -260,6 +260,9 @@ class MigrationPlan:
             obj["ignore_after"] = self.ignore_after.to_dict()
         return obj
 
+    def is_rollbackable(self) -> bool:
+        return (self.change is not None) and (self.change.backward is not None)
+
     def get_checksum(self) -> str:
         if self._checksum is not None:
             return self._checksum
