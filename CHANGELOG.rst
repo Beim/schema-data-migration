@@ -84,3 +84,8 @@ Version 0.5.5
 =============
 
 - Add docker base image
+
+Version 0.5.6
+=============
+
+- Add unittest github action
