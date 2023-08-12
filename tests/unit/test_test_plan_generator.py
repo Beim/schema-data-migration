@@ -1,6 +1,6 @@
 import networkx as nx
 
-from migration.auto_test_plan import TestPlanGenerator
+from migration.auto_test_plan import PlanGenerator
 
 
 def get_simple_plans() -> nx.DiGraph:
@@ -22,7 +22,7 @@ def get_simple_plans() -> nx.DiGraph:
 
 def test_generate_forward():
     G = get_simple_plans()
-    generator = TestPlanGenerator(G)
+    generator = PlanGenerator(G)
 
     expected = [0, 5]
 
@@ -32,7 +32,7 @@ def test_generate_forward():
 
 def test_generate_step_by_step_forward():
     G = get_simple_plans()
-    generator = TestPlanGenerator(G)
+    generator = PlanGenerator(G)
 
     expected = [0, 1, 2, 3, 4, 5]
 
@@ -42,7 +42,7 @@ def test_generate_step_by_step_forward():
 
 def test_generate_step_by_step_forward_and_backward():
     G = get_simple_plans()
-    generator = TestPlanGenerator(G)
+    generator = PlanGenerator(G)
 
     expected = [
         0,
@@ -65,7 +65,7 @@ def test_generate_step_by_step_forward_and_backward():
 
 def test_generate_random_v2():
     G = get_simple_plans()
-    generator = TestPlanGenerator(G)
+    generator = PlanGenerator(G)
 
     X = generator.gen_monkey(
         walk_len=20, start_node=0, important_nodes=[0, 5], non_important_nodes=[]

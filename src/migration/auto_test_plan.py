@@ -7,7 +7,7 @@ from . import consts
 from . import migration_plan as mp
 
 
-class TestPlanGenerator:
+class PlanGenerator:
     def __init__(self, graph: nx.DiGraph):
         # read migration plans
         self.graph = graph
@@ -87,7 +87,7 @@ class TestPlanGenerator:
 class AutoTestPlan:
     def __init__(self):
         self.mpm = mp.MigrationPlanManager()
-        self.tpg = TestPlanGenerator(self.mpm.get_version_dep_graph())
+        self.tpg = PlanGenerator(self.mpm.get_version_dep_graph())
 
     def read_test_plan(
         self, test_plan_content: List[str]

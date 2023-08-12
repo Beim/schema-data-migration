@@ -5,7 +5,8 @@ from sqlalchemy import text
 
 from migration import migration_plan as mp
 from migration.env import cli_env
-from tests import testcommon as tc
+
+from . import testcommon as tc
 
 logger = logging.getLogger(__name__)
 

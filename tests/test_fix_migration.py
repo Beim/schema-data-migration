@@ -3,7 +3,8 @@ import logging
 import pytest
 
 from migration.db import model as dbmodel
-from tests import testcommon as tc
+
+from . import testcommon as tc
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ import logging
 
 from sqlalchemy import text
 
-from tests import testcommon as tc
+from . import testcommon as tc
 
 logger = logging.getLogger(__name__)
 

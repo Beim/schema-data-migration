@@ -1,0 +1,66 @@
+name: Unittest
+
+on: [push]
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    container: beim/schema-data-migration:base-0.1.0
+    strategy:
+      matrix:
+        dbimage: ['mysql:5.7', 'mysql:8.0', 'mysql:latest', 'mariadb:10', 'mariadb:latest']
+
+    services:
+      db1:
+        image: ${{ matrix.dbimage }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+      db2:
+        image: ${{ matrix.dbimage }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        cat /etc/os-release
+        python3 --version
+        npm --version
+        apt-get update && apt-get install -y --no-install-recommends python3-dev default-libmysqlclient-dev build-essential pkg-config git
+    
+    - name: Run unittest
+      shell: bash
+      run: |
+        python3 -m venv venv && source venv/bin/activate
+        pip install -e .[testing]
+        python -m pytest --cov=migration --cov-config=.coveragerc ./tests
+        echo "git --version"
+        git --version
+        pwd
+        ls -alh
+        echo "git config --global --add safe.directory /__w/schema-data-migration/schema-data-migration"
+        git config --global --add safe.directory /__w/schema-data-migration/schema-data-migration
+        python -m coveralls --service=github
+      env:
+        MYSQL_PWD: root
+        MIGRATION_CWD: ./cwd
+        ALLOW_UNSAFE: 1
+        UNITTEST_MYSQL_HOST1: db1
+        UNITTEST_MYSQL_PORT1: 3306
+        UNITTEST_MYSQL_HOST2: db2
+        UNITTEST_MYSQL_PORT2: 3306
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: unittest
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build image
+      run: |
+        docker build -t beim/schema-data-migration:${GITHUB_REF#refs/tags/} .

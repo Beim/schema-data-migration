@@ -1,5 +1,8 @@
 # sdm (schema data migration)
 
+[![build status](https://img.shields.io/github/actions/workflow/status/beim/schema-data-migration/unittest.yml?branch=main)](https://github.com/Beim/schema-data-migration/actions)
+[![Coverage Status](https://coveralls.io/repos/github/Beim/schema-data-migration/badge.svg?main)](https://coveralls.io/github/Beim/schema-data-migration?branch=main)
+
 `sdm` is a powerful tool for managing database migrations in MySQL and MariaDB. With `sdm`, you can easily manage both schema and data migration, making it an essential tool for any developer working with databases. 
 
 Schema migration is powered by [skeema](https://www.skeema.io/), which uses a [declarative approach](https://www.skeema.io/blog/2019/01/18/declarative/) to schema management: the repository reflects a desired end-state of table definitions, and the tool figures out how to convert any database into this state.

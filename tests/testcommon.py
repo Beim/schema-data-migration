@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 from sqlalchemy import text
 
 from migration import migration_plan as mp
+from migration.db import db
 from migration.env import cli_env
 from migration.lib import CLI
 
@@ -19,11 +20,32 @@ def make_cli(d: dict = {"environment": "dev"}) -> CLI:
 
 
 def init_workspace():
-    schema = "migration_test"
+    schema = cli_env.UNITTEST_DB_NAME
+    sess = db.make_session(
+        host=cli_env.UNITTEST_MYSQL_HOST1,
+        port=cli_env.UNITTEST_MYSQL_PORT1,
+        user="root",
+        password=cli_env.MYSQL_PWD,
+        schema="mysql",
+        echo=False,
+        create_all_tables=False,
+    )
+    sess.execute(text(f"create database if not exists {schema};"))
+    sess = db.make_session(
+        host=cli_env.UNITTEST_MYSQL_HOST2,
+        port=cli_env.UNITTEST_MYSQL_PORT2,
+        user="root",
+        password=cli_env.MYSQL_PWD,
+        schema="mysql",
+        echo=False,
+        create_all_tables=False,
+    )
+    sess.execute(text(f"create database if not exists {schema};"))
+
     cli = make_cli(
         {
-            "host": "127.0.0.1",
-            "port": 3306,
+            "host": cli_env.UNITTEST_MYSQL_HOST1,
+            "port": cli_env.UNITTEST_MYSQL_PORT1,
             "user": "root",
             "schema": schema,
         }
@@ -35,8 +57,8 @@ def init_workspace():
     cli = make_cli(
         {
             "environment": "dev",
-            "host": "127.0.0.1",
-            "port": 3307,
+            "host": cli_env.UNITTEST_MYSQL_HOST2,
+            "port": cli_env.UNITTEST_MYSQL_PORT2,
             "user": "root",
         }
     )

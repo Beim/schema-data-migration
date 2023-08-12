@@ -1,8 +1,9 @@
 # .coveragerc to control coverage.py
 [run]
 branch = True
-source = migration
-# omit = bad_file.py
+source = schema-data-migration
+omit = 
+    */main.py
 
 [paths]
 source =

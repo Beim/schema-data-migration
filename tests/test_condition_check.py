@@ -7,7 +7,8 @@ from migration import err
 from migration import migration_plan as mp
 from migration.db import model as dbmodel
 from migration.env import cli_env
-from tests import testcommon as tc
+
+from . import testcommon as tc
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +171,8 @@ def test_condition_check_shell_file(sort_plan_by_version):
     with open(
         os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, "check.sh"), "w"
     ) as f:
-        f.write("""#!/bin/sh
-result=$(mysql -uroot -h127.0.0.1 -P3307 -Dmigration_test -p's@mplep@ssword' -e "select count(*) from testtable;" | awk 'NR==2{print $1}')
+        f.write(f"""#!/bin/sh
+result=$(mysql -uroot -h{cli_env.UNITTEST_MYSQL_HOST2} -P{cli_env.UNITTEST_MYSQL_PORT2} -D{cli_env.UNITTEST_DB_NAME} -p{cli_env.MYSQL_PWD} -e "select count(*) from testtable;" | awk 'NR==2{{print $1}}')
 if [ -n "$result" ] && [ "$result" -eq "$SDM_EXPECTED" ]; then
     exit 0
 else

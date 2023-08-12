@@ -7,13 +7,20 @@ from . import model
 
 
 def make_session(
-    host: str, port: int, user: str, password: str, schema: str, echo: bool = False
+    host: str,
+    port: int,
+    user: str,
+    password: str,
+    schema: str,
+    echo: bool = False,
+    create_all_tables: bool = True,
 ) -> Session:
     encoded_password = urllib.parse.quote_plus(password)
     engine = create_engine(
         f"mysql+mysqldb://{user}:{encoded_password}@{host}:{port}/{schema}",
         echo=echo,
     )
-    model.Base.metadata.create_all(engine)
+    if create_all_tables:
+        model.Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     return Session()

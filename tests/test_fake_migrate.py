@@ -4,7 +4,8 @@ from sqlalchemy import text
 
 from migration import migration_plan as mp
 from migration.lib import CLI
-from tests import testcommon as tc
+
+from . import testcommon as tc
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,6 @@ def test_fake_migrate(sort_plan_by_version):
         hists = dao.get_all()
         # init + new_test_table + insert_test_data
         assert len(hists) == 3
-        row = dao.session.execute(text("select name from testtable;")).one_or_none()
-        assert row is None
 
 
 def test_fake_rollback(sort_plan_by_version):

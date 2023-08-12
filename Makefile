@@ -17,6 +17,13 @@ fast_test:
 	pip install .
 	python -m pytest -m "not slow" ./tests
 
+cov:
+	pip install .
+	python -m pytest --cov=migration --cov-config=.coveragerc ./tests
+cov-html:
+	pip install .
+	python -m pytest --cov=migration --cov-config=.coveragerc --cov-report=html ./tests
+
 single_test:
 	pip install .
 	python -m pytest ./tests -k $(t)

@@ -2,8 +2,25 @@ import os
 
 from . import common
 
-MIGRATION_CWD = common.getenv("MIGRATION_CWD", default=".", required=False)
+MIGRATION_CWD = os.path.abspath(
+    common.getenv("MIGRATION_CWD", default=".", required=False)
+)
 MYSQL_PWD = common.getenv("MYSQL_PWD", required=True)
+UNITTEST_DB_NAME = common.getenv(
+    "UNITTEST_DB_NAME", required=False, default="migration_test"
+)
+UNITTEST_MYSQL_HOST1 = common.getenv(
+    "UNITTEST_MYSQL_HOST1", required=False, default="127.0.0.1"
+)
+UNITTEST_MYSQL_PORT1 = int(
+    common.getenv("UNITTEST_MYSQL_PORT1", required=False, default="3306")
+)
+UNITTEST_MYSQL_HOST2 = common.getenv(
+    "UNITTEST_MYSQL_HOST2", required=False, default="127.0.0.1"
+)
+UNITTEST_MYSQL_PORT2 = int(
+    common.getenv("UNITTEST_MYSQL_PORT2", required=False, default="3307")
+)
 
 ALLOW_UNSAFE = int(common.getenv("ALLOW_UNSAFE", default="0", required=False))
 ALLOW_ECHO_SQL = int(common.getenv("ALLOW_ECHO_SQL", default="0", required=False))
@@ -110,7 +127,7 @@ SAMPLE_PCKAGE_JSON = """{
     "typescript": "^4.6.2"
   },
   "dependencies": {
-    "mysql": "^2.18.1",
+    "mysql2": "^3.6.0",
     "reflect-metadata": "^0.1.13",
     "typeorm": "^0.3.0-rc.40"
   },
