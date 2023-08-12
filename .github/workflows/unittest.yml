@@ -36,11 +36,6 @@ jobs:
         python3 -m venv venv && source venv/bin/activate
         pip install -e .[testing]
         python -m pytest --cov=migration --cov-config=.coveragerc ./tests
-        echo "git --version"
-        git --version
-        pwd
-        ls -alh
-        echo "git config --global --add safe.directory /__w/schema-data-migration/schema-data-migration"
         git config --global --add safe.directory /__w/schema-data-migration/schema-data-migration
         python -m coveralls --service=github
       env:
