@@ -860,16 +860,6 @@ class CLI:
         self.mpm = mp.MigrationPlanManager()
         return self.mpm
 
-    def parse_migration_plans_to_map(
-        self, plans: List[mp.MigrationPlan]
-    ) -> Dict[str, Dict[str, mp.MigrationPlan]]:
-        plan_map = collections.defaultdict(
-            lambda: collections.defaultdict(mp.MigrationPlan)
-        )
-        for p in plans:
-            plan_map[p.version][p.name] = p
-        return plan_map
-
     def clean_cwd(self):
         shutil.rmtree(cli_env.MIGRATION_CWD, ignore_errors=True)
 
@@ -1241,6 +1231,7 @@ class CLI:
     def diff(self):
         left = self.args.left
         right = self.args.right
+        verbose = self.args.verbose if "verbose" in self.args else False
         if left == right:
             return
         self.read_migration_plans()
@@ -1254,7 +1245,7 @@ class CLI:
             self.dump_schema(right, right_type, right_dump_dir_path)
 
             has_diff = False
-            if not self.args.verbose:
+            if not verbose:
                 try:
                     subprocess.check_call(
                         shlex.split("diff --recursive --brief left right"),

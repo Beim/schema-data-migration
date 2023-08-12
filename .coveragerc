@@ -4,6 +4,7 @@ branch = True
 source = schema-data-migration
 omit = 
     */main.py
+    */env/load.py
 
 [paths]
 source =

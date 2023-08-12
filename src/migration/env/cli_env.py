@@ -1,33 +1,33 @@
 import os
 
-from . import common
+from . import load
 
 MIGRATION_CWD = os.path.abspath(
-    common.getenv("MIGRATION_CWD", default=".", required=False)
+    load.getenv("MIGRATION_CWD", default=".", required=False)
 )
-MYSQL_PWD = common.getenv("MYSQL_PWD", required=True)
-UNITTEST_DB_NAME = common.getenv(
+MYSQL_PWD = load.getenv("MYSQL_PWD", required=True)
+UNITTEST_DB_NAME = load.getenv(
     "UNITTEST_DB_NAME", required=False, default="migration_test"
 )
-UNITTEST_MYSQL_HOST1 = common.getenv(
+UNITTEST_MYSQL_HOST1 = load.getenv(
     "UNITTEST_MYSQL_HOST1", required=False, default="127.0.0.1"
 )
 UNITTEST_MYSQL_PORT1 = int(
-    common.getenv("UNITTEST_MYSQL_PORT1", required=False, default="3306")
+    load.getenv("UNITTEST_MYSQL_PORT1", required=False, default="3306")
 )
-UNITTEST_MYSQL_HOST2 = common.getenv(
+UNITTEST_MYSQL_HOST2 = load.getenv(
     "UNITTEST_MYSQL_HOST2", required=False, default="127.0.0.1"
 )
 UNITTEST_MYSQL_PORT2 = int(
-    common.getenv("UNITTEST_MYSQL_PORT2", required=False, default="3307")
+    load.getenv("UNITTEST_MYSQL_PORT2", required=False, default="3307")
 )
 
-ALLOW_UNSAFE = int(common.getenv("ALLOW_UNSAFE", default="0", required=False))
-ALLOW_ECHO_SQL = int(common.getenv("ALLOW_ECHO_SQL", default="0", required=False))
+ALLOW_UNSAFE = int(load.getenv("ALLOW_UNSAFE", default="0", required=False))
+ALLOW_ECHO_SQL = int(load.getenv("ALLOW_ECHO_SQL", default="0", required=False))
 
-SKEEMA_CMD_PATH = common.getenv("SKEEMA_CMD_PATH", default="skeema", required=False)
-NODE_CMD_PATH = common.getenv("NODE_CMD_PATH", default="node", required=False)
-NPM_CMD_PATH = common.getenv("NPM_CMD_PATH", default="npm", required=False)
+SKEEMA_CMD_PATH = load.getenv("SKEEMA_CMD_PATH", default="skeema", required=False)
+NODE_CMD_PATH = load.getenv("NODE_CMD_PATH", default="node", required=False)
+NPM_CMD_PATH = load.getenv("NPM_CMD_PATH", default="npm", required=False)
 
 SCHEMA_DIR = "schema"
 DATA_DIR = "data"
@@ -35,12 +35,13 @@ MIGRATION_PLAN_DIR = "migration_plan"
 SCHEMA_STORE_DIR = ".schema_store"
 ENV_INI_FILE = "env.ini"
 
+SDM_SCHEMA_DIR = os.path.abspath(os.path.join(MIGRATION_CWD, SCHEMA_DIR))
 SDM_DATA_DIR = os.path.abspath(os.path.join(MIGRATION_CWD, DATA_DIR))
 
-TABLE_MIGRATION_HISTORY = common.getenv(
+TABLE_MIGRATION_HISTORY = load.getenv(
     "TABLE_MIGRATION_HISTORY", default="_migration_history", required=False
 )
-TABLE_MIGRATION_HISTORY_LOG = common.getenv(
+TABLE_MIGRATION_HISTORY_LOG = load.getenv(
     "TABLE_MIGRATION_HISTORY", default="_migration_history_log", required=False
 )
 
