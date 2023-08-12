@@ -79,3 +79,8 @@ Version 0.5.4
 =============
 
 - Repeatable migration will not be executed if fake flag is set
+
+Version 0.5.5
+=============
+
+- Add docker base image
