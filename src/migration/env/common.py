@@ -3,8 +3,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-printenv = __name__ == "__main__"
-
 _HERE = Path(os.getcwd())
 
 try:
@@ -23,8 +21,6 @@ def getenv(key: str, default: str = "", required: bool = False) -> str:
     :param required: throw error if required
     """
     res = os.getenv(key, default)
-    if printenv:
-        print("{:40} {}".format(key, res))
     if (res == "" or res is None) and required:
         raise KeyError("Required Environment variable {} not defined".format(key))
     return res

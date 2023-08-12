@@ -2,6 +2,8 @@ import os
 from argparse import Namespace
 from typing import Optional, Tuple
 
+from sqlalchemy import text
+
 from migration import migration_plan as mp
 from migration.env import cli_env
 from migration.lib import CLI
@@ -117,3 +119,17 @@ def migrate_dev() -> CLI:
     cli = make_cli()
     cli.migrate()
     return cli
+
+
+def migrate_and_check(len_hists: int, len_row: int):
+    cli = migrate_dev()
+    check_len_hists_row(cli, len_hists, len_row)
+
+
+def check_len_hists_row(cli: CLI, len_hists: int, len_row: int):
+    dao = cli.dao
+    with dao.session.begin():
+        hists = dao.get_all()
+        assert len(hists) == len_hists
+        row = dao.session.execute(text("select name from testtable;")).all()
+        assert len(row) == len_row

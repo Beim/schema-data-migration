@@ -1,23 +1,93 @@
+import random
 from typing import List, Tuple
 
-from . import consts, helper
+import networkx as nx
+
+from . import consts
 from . import migration_plan as mp
 
-"""
-Sample test plan
-[
-    "0000_init",
-    "0001_add_column",
-    "0002_seed_data",
-    "0003_add_column",
-]
-"""
+
+class TestPlanGenerator:
+    def __init__(self, graph: nx.DiGraph):
+        # read migration plans
+        self.graph = graph
+
+    def gen_simple_forward(self) -> List[int]:
+        max_node = max(self.graph.nodes)
+        return [0, max_node]
+
+    def gen_step_by_step_forward(self) -> List[int]:
+        max_node = max(self.graph.nodes)
+        result = []
+        for i in range(0, max_node + 1):
+            result.append(i)
+        return result
+
+    def gen_step_by_step_forward_and_backward(self) -> List[int]:
+        max_node = max(self.graph.nodes)
+
+        result = []
+        max_visited = 0
+        while max_visited <= max_node:
+            curr = max_visited
+            result.append(curr)
+            max_visited += 1
+
+            while self.graph.has_edge(curr, curr - 1):
+                curr -= 1
+                result.append(curr)
+        return result
+
+    def gen_monkey(
+        self,
+        walk_len: int = None,
+        start_node: int = 0,
+        important_nodes: List[int] = [],
+        non_important_nodes: List[int] = [],
+    ) -> List[int]:
+        G = self.graph.copy()
+
+        if walk_len is None:
+            walk_len = (len(G.nodes) - start_node) * 10
+
+        # prevent rollback from the start node
+        for n in list(G.succ[start_node]):
+            if n < start_node:
+                G.remove_edge(start_node, n)
+
+        for i, j in G.edges:
+            G[i][j]["weight"] = 4
+            if j in important_nodes:
+                G[i][j]["weight"] *= 2
+            if j in non_important_nodes:
+                G[i][j]["weight"] //= 2
+            if i < j and not G.has_edge(j, i):
+                G[i][j]["weight"] -= 1
+
+        result: List[int] = []
+
+        curr = start_node
+        for _ in range(walk_len):
+            result.append(curr)
+            succ = list(G.succ[curr])
+            if len(succ) == 0:
+                break
+            weight_succ = []
+            for s in succ:
+                weight = G[curr][s]["weight"]
+                weight_succ.extend([s] * weight)
+            next_curr = random.choice(weight_succ)
+            if G[curr][next_curr]["weight"] > 1:
+                G[curr][next_curr]["weight"] -= 1
+            curr = next_curr
+
+        return result
 
 
 class AutoTestPlan:
     def __init__(self):
         self.mpm = mp.MigrationPlanManager()
-        self.tpg = helper.TestPlanGenerator(self.mpm.get_version_dep_graph())
+        self.tpg = TestPlanGenerator(self.mpm.get_version_dep_graph())
 
     def read_test_plan(
         self, test_plan_content: List[str]

@@ -1,6 +1,6 @@
 import networkx as nx
 
-from migration.helper import TestPlanGenerator
+from migration.auto_test_plan import TestPlanGenerator
 
 
 def get_simple_plans() -> nx.DiGraph:
