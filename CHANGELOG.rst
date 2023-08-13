@@ -95,3 +95,8 @@ Version 0.5.7
 
 - Add `rollbackable` column in `info` command output
 - Enable ALLOW_UNSAFE by default when rollback schema migration
+
+Version 0.5.8
+=============
+
+- Use `.skeema` to replace `env.ini` for configuration

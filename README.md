@@ -262,7 +262,7 @@ The first command will show you which files would be deleted without actually de
 
 ## Online schema change
 
-To enable online schema change, add the following configuration to your `env.ini` file:
+To enable online schema change, add the following configuration to your `schema/.skeema` file:
 
 ```ini
 alter-wrapper=/usr/local/bin/pt-online-schema-change --execute --alter {CLAUSES} D={SCHEMA},t={TABLE},h={HOST},P={PORT},u={USER},p={PASSWORDX}

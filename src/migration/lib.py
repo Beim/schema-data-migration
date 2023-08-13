@@ -536,10 +536,6 @@ class CLI:
                 cli_env.TABLE_MIGRATION_HISTORY,
             ]
         )
-        os.link(
-            os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, ".skeema"),
-            os.path.join(cli_env.MIGRATION_CWD, cli_env.ENV_INI_FILE),
-        )
 
     def _init_schema_store_dir(self):
         os.makedirs(
@@ -565,7 +561,6 @@ class CLI:
                 os.path.join(cli_env.MIGRATION_CWD, cli_env.MIGRATION_PLAN_DIR),
                 os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR),
                 os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_STORE_DIR),
-                os.path.join(cli_env.MIGRATION_CWD, cli_env.ENV_INI_FILE),
                 os.path.join(cli_env.MIGRATION_CWD, ".gitignore"),
                 os.path.join(cli_env.MIGRATION_CWD, "pre-commit"),
                 os.path.join(cli_env.MIGRATION_CWD, "package.json"),
@@ -806,20 +801,23 @@ class CLI:
         hist_list = dao.get_all_dto()
 
         def get_rollbackable(hist: model.MigrationHistoryDTO) -> str:
-            match hist.type:
-                case mp.Type.SCHEMA | mp.Type.DATA:
-                    plan, _ = self.mpm.must_get_plan_by_signature(
-                        mp.MigrationSignature(
-                            version=hist.ver,
-                            name=hist.name,
+            try:
+                match hist.type:
+                    case mp.Type.SCHEMA | mp.Type.DATA:
+                        plan, _ = self.mpm.must_get_plan_by_signature(
+                            mp.MigrationSignature(
+                                version=hist.ver,
+                                name=hist.name,
+                            )
                         )
-                    )
-                case mp.Type.REPEATABLE:
-                    plan = self.mpm.must_get_repeatable_plan_by_signature(
-                        mp.MigrationSignature(version=hist.ver, name=hist.name)
-                    )
-                case _:
-                    return "false"
+                    case mp.Type.REPEATABLE:
+                        plan = self.mpm.must_get_repeatable_plan_by_signature(
+                            mp.MigrationSignature(version=hist.ver, name=hist.name)
+                        )
+                    case _:
+                        return "false"
+            except Exception:
+                return "unknown"
             return "true" if plan.is_rollbackable() else "false"
 
         output = [
@@ -952,7 +950,7 @@ class CLI:
             self.copy_schema_by_index(index_sha1, dump_dir_path)
             return
         if diff_type == mp.DiffItemType.ENVIRONMENT:
-            env_ini = helper.parse_env_ini()  # env.ini is just a symlink to .skeema
+            env_ini = helper.parse_env_ini()
             env = diff_arg
             if not env_ini.has_section(env):
                 raise Exception(f"Environment not found, name={env}")

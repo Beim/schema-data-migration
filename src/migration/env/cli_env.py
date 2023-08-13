@@ -33,7 +33,7 @@ SCHEMA_DIR = "schema"
 DATA_DIR = "data"
 MIGRATION_PLAN_DIR = "migration_plan"
 SCHEMA_STORE_DIR = ".schema_store"
-ENV_INI_FILE = "env.ini"
+ENV_INI_FILE = os.path.join(SCHEMA_DIR, ".skeema")
 
 SDM_SCHEMA_DIR = os.path.abspath(os.path.join(MIGRATION_CWD, SCHEMA_DIR))
 SDM_DATA_DIR = os.path.abspath(os.path.join(MIGRATION_CWD, DATA_DIR))

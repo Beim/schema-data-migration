@@ -35,12 +35,12 @@ The `init` command creates the following files and directories:
 
 ```bash
 .
-├── env.ini             # Database environment configuration
 ├── .env                # Environment variables
 ├── migration_plan/
 │   └── 0000_init.json  # Migration plan, format <version>_<name>.json
 ├── data/               # Data migration script
 └── schema/             # Schema model
+    └── .skeema         # Database environment configuration
 ```
 
 Also it generates a "schema dump" in `schema` directory: CREATE files (CREATE TABLE, CREATE PROCEDURE, CREATE FUNCTION) for all tables and routines found on a DB instance.
@@ -51,7 +51,7 @@ Also it generates a "schema dump" in `schema` directory: CREATE files (CREATE TA
 sdm add-env --host 127.0.0.1 --port 3307 -u root dev
 ```
 
-The `add-env` command adds a new environment configuration into `env.ini` file:
+The `add-env` command adds a new environment configuration into `schema/.skeema` file:
 
 ```ini
 [production]
