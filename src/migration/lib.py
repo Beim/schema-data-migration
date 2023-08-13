@@ -1,5 +1,3 @@
-import configparser
-import importlib.util
 import json
 import logging
 import os
@@ -11,382 +9,15 @@ from argparse import Namespace
 from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import text
-from sqlalchemy.orm import Session
 from tabulate import tabulate
 
 from . import auto_test_plan, consts, err, helper
 from . import migration_plan as mp
 from .db import hist_dao, model
-from .db.db import make_session
 from .env import cli_env
+from .migrator import Migrator
 
 logger = logging.getLogger(__name__)
-
-
-def check_file_existence(paths: List[str]):
-    for path in paths:
-        if os.path.exists(path):
-            raise Exception(f"{path} already exists")
-
-
-def call_skeema(raw_args: List[str], cwd: str = cli_env.MIGRATION_CWD, env=None):
-    # https://stackoverflow.com/questions/39872088/executing-interactive-shell-script-in-python
-    cmd = f"{cli_env.SKEEMA_CMD_PATH} " + " ".join(raw_args)
-    logger.info("Run %s", cmd)
-    subprocess.check_call(shlex.split(cmd), cwd=cwd, env=env)
-
-
-def parse_env_ini() -> configparser.ConfigParser:
-    file_path = os.path.join(cli_env.MIGRATION_CWD, cli_env.ENV_INI_FILE)
-    with open(file_path) as f:
-        data = "[DEFAULT]\n" + f.read()
-    config = configparser.ConfigParser()
-    config.read_string(data)
-    return config
-
-
-def get_env_ini_section(env: str) -> configparser.SectionProxy:
-    cfg = parse_env_ini()
-    if not cfg.has_section(env):
-        raise Exception(f"Environment [{env}] not found in configuration")
-    return cfg[env]
-
-
-def get_env_with_update(update_env: Dict[str, str]) -> Dict[str, str]:
-    os_env = os.environ.copy()
-    os_env.update(update_env)
-    return os_env
-
-
-def build_session_from_env(env: str, echo: bool = False) -> Session:
-    section = get_env_ini_section(env)
-    return make_session(
-        host=section["host"],
-        port=int(section["port"]),
-        user=section["user"],
-        password=cli_env.MYSQL_PWD,
-        schema=section["schema"],
-        echo=echo,
-    )
-
-
-def files_under_dir(dir_path: str, ends_with: str) -> Dict[str, str]:
-    """
-    return a map of file name to file path
-    """
-    res: Dict[str, str] = {}
-    for root, _, files in os.walk(dir_path):
-        for file in files:
-            if not file.endswith(ends_with):
-                continue
-            res[file] = os.path.join(root, file)
-    return res
-
-
-class Migrator:
-    def check_condition(
-        self,
-        condition: mp.ConditionCheck,
-        args: Namespace,
-        checksum_match: Optional[bool] = None,
-    ) -> bool:
-        match condition.type:
-            case mp.DataChangeType.SQL:
-                return self.check_condition_sql(condition.sql, condition.expected, args)
-            case mp.DataChangeType.SQL_FILE:
-                return self.check_condition_sql_file(
-                    condition.file, condition.expected, args
-                )
-            case mp.DataChangeType.PYTHON:
-                return self.check_condition_python(
-                    condition.file,
-                    condition.expected,
-                    args,
-                    checksum_match=checksum_match,
-                )
-            case mp.DataChangeType.SHELL:
-                return self.check_condition_shell(
-                    condition.file,
-                    condition.expected,
-                    args,
-                    checksum_match=checksum_match,
-                )
-            case mp.DataChangeType.TYPESCRIPT:
-                return self.check_condition_typescript(
-                    condition.file,
-                    condition.expected,
-                    args,
-                    checksum_match=checksum_match,
-                )
-
-    def forward(self, migration_plan: mp.MigrationPlan, args: Namespace):
-        logger.info(f"Executing {migration_plan}")
-        forward = migration_plan.change.forward
-
-        # precheck
-        if forward.precheck is not None:
-            if not self.check_condition(
-                forward.precheck,
-                args,
-                checksum_match=migration_plan.get_checksum_match(),
-            ):
-                raise err.ConditionCheckFailedError(
-                    f"precheck failed for {migration_plan}"
-                )
-
-        if migration_plan.type == mp.Type.SCHEMA:
-            sha1 = forward.id
-            self.move_schema_to(sha1, args)
-        if migration_plan.type in [mp.Type.DATA, mp.Type.REPEATABLE]:
-            if forward.type == mp.DataChangeType.SQL:
-                self.migrate_data_sql(forward.sql, args)
-            if forward.type == mp.DataChangeType.SQL_FILE:
-                self.migrate_data_sql_file(forward.file, args)
-            if forward.type == mp.DataChangeType.PYTHON:
-                self.migrate_data_python(forward.file, args)
-            if forward.type == mp.DataChangeType.SHELL:
-                self.migrate_data_shell(forward.file, args)
-            if forward.type == mp.DataChangeType.TYPESCRIPT:
-                self.migrate_data_typescript(forward.file, args)
-
-        # postcheck
-        if forward.postcheck is not None:
-            if not self.check_condition(forward.postcheck, args):
-                raise err.ConditionCheckFailedError(
-                    f"postcheck failed for {migration_plan}"
-                )
-
-    def backward(self, migration_plan: mp.MigrationPlan, args: Namespace):
-        logger.info(f"Rollbacking {migration_plan}")
-        backward = migration_plan.change.backward
-        if backward is None:
-            logger.info(f"No backward change for {migration_plan}")
-            return
-
-        # precheck
-        if backward.precheck is not None:
-            if not self.check_condition(backward.precheck, args):
-                raise err.ConditionCheckFailedError(
-                    f"precheck failed for {migration_plan}"
-                )
-
-        if migration_plan.type == mp.Type.SCHEMA:
-            sha1 = backward.id
-            self.move_schema_to(sha1, args)
-        if migration_plan.type in [mp.Type.DATA, mp.Type.REPEATABLE]:
-            if backward.type == mp.DataChangeType.SQL:
-                self.migrate_data_sql(backward.sql, args)
-            if backward.type == mp.DataChangeType.SQL_FILE:
-                self.migrate_data_sql_file(backward.file, args)
-            if backward.type == mp.DataChangeType.PYTHON:
-                self.migrate_data_python(backward.file, args)
-            if backward.type == mp.DataChangeType.SHELL:
-                self.migrate_data_shell(backward.file, args)
-            if backward.type == mp.DataChangeType.TYPESCRIPT:
-                self.migrate_data_typescript(backward.file, args)
-
-        # postcheck
-        if backward.postcheck is not None:
-            if not self.check_condition(backward.postcheck, args):
-                raise err.ConditionCheckFailedError(
-                    f"postcheck failed for {migration_plan}"
-                )
-
-    def check_condition_shell(
-        self,
-        shell_file: str,
-        expected: int,
-        args: Namespace,
-        checksum_match: Optional[bool] = None,
-    ):
-        try:
-            self.migrate_data_shell(
-                shell_file, args, expected, checksum_match=checksum_match
-            )
-        except Exception:
-            return False
-        return True
-
-    def migrate_data_shell(
-        self,
-        shell_file: str,
-        args: Namespace,
-        expected: Optional[int] = None,
-        checksum_match: Optional[bool] = None,
-    ):
-        shell_file_path = os.path.join(
-            cli_env.MIGRATION_CWD, cli_env.DATA_DIR, shell_file
-        )
-        section = get_env_ini_section(args.environment)
-        cmd = f"sh {shell_file_path}"
-        env = get_env_with_update(
-            {
-                "MYSQL_PWD": cli_env.MYSQL_PWD,
-                "HOST": section["host"],
-                "PORT": section["port"],
-                "USER": section["user"],
-                "SCHEMA": section["schema"],
-                consts.ENV_SDM_DATA_DIR: cli_env.SDM_DATA_DIR,
-            }
-        )
-        if expected is not None:
-            env[consts.ENV_SDM_EXPECTED] = str(expected)
-        if checksum_match is not None:
-            env[consts.ENV_SDM_CHECKSUM_MATCH] = "1" if checksum_match else "0"
-        subprocess.check_call(
-            shlex.split(cmd),
-            cwd=cli_env.MIGRATION_CWD,
-            env=env,
-        )
-
-    def check_condition_typescript(
-        self,
-        ts_file: str,
-        expected: int,
-        args: Namespace,
-        checksum_match: Optional[bool] = None,
-    ):
-        try:
-            self.migrate_data_typescript(
-                ts_file, args, expected, checksum_match=checksum_match
-            )
-        except Exception:
-            return False
-        return True
-
-    def migrate_data_typescript(
-        self,
-        ts_file: str,
-        args: Namespace,
-        expected: Optional[int] = None,
-        checksum_match: Optional[bool] = None,
-    ) -> int:
-        section = get_env_ini_section(args.environment)
-        ts_file_path = os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, ts_file)
-        # create temporary directory under migration cwd/tmp
-        with tempfile.TemporaryDirectory(dir=cli_env.MIGRATION_CWD) as temp_dir:
-            src_path = os.path.join(temp_dir, "src")
-            os.makedirs(src_path)
-            # copy ts file to temp directory
-            with open(os.path.join(src_path, "index.ts"), "w") as f:
-                f.write(
-                    cli_env.SAMPLE_INDEX_TS
-                    % ("true" if cli_env.ALLOW_ECHO_SQL else "false")
-                )
-            shutil.copy(
-                ts_file_path,
-                os.path.join(src_path, "migration.ts"),  # import by index.ts
-            )
-            # build js file
-            subprocess.check_call(
-                shlex.split(f"{cli_env.NPM_CMD_PATH} run build"), cwd=temp_dir
-            )
-            env = get_env_with_update(
-                {
-                    "MYSQL_PWD": cli_env.MYSQL_PWD,
-                    "HOST": section["host"],
-                    "PORT": section["port"],
-                    "USER": section["user"],
-                    "SCHEMA": section["schema"],
-                    consts.ENV_SDM_DATA_DIR: cli_env.SDM_DATA_DIR,
-                }
-            )
-            if expected is not None:
-                env[consts.ENV_SDM_EXPECTED] = str(expected)
-            if checksum_match is not None:
-                env[consts.ENV_SDM_CHECKSUM_MATCH] = "1" if checksum_match else "0"
-
-            # run js file
-            subprocess.check_call(
-                [cli_env.NODE_CMD_PATH, "src/index.js"],
-                cwd=temp_dir,
-                env=env,
-            )
-            return 0
-
-    def check_condition_python(
-        self,
-        python_file: str,
-        expected: int,
-        args: Namespace,
-        checksum_match: Optional[bool] = None,
-    ):
-        result = self.migrate_data_python(
-            python_file, args, checksum_match=checksum_match
-        )
-        return result == expected
-
-    def migrate_data_python(
-        self, python_file: str, args: Namespace, checksum_match: Optional[bool] = None
-    ) -> int:
-        python_file_path = os.path.join(
-            cli_env.MIGRATION_CWD, cli_env.DATA_DIR, python_file
-        )
-        spec = importlib.util.spec_from_file_location("run_python", python_file_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        session = build_session_from_env(args.environment, echo=cli_env.ALLOW_ECHO_SQL)
-        obj = {
-            consts.ENV_SDM_DATA_DIR: cli_env.SDM_DATA_DIR,
-        }
-        if checksum_match is not None:
-            obj[consts.ENV_SDM_CHECKSUM_MATCH] = "1" if checksum_match else "0"
-        return module.run(session, args=obj)
-
-    def migrate_data_sql_file(self, sql_file: str, args: Namespace):
-        with open(os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, sql_file)) as f:
-            sql = f.read()
-        self.migrate_data_sql(sql, args)
-
-    def migrate_data_sql(self, sql: str, args: Namespace):
-        session = build_session_from_env(args.environment, echo=cli_env.ALLOW_ECHO_SQL)
-        with session.begin():
-            result = session.execute(text(sql))
-            logger.info(
-                f"Migrated SQL={helper.truncate_str(sql, max_len=200)},"
-                f" result.rowcount={result.rowcount}"
-            )
-
-    def check_condition_sql_file(self, sql_file: str, expected: int, args: Namespace):
-        with open(os.path.join(cli_env.MIGRATION_CWD, cli_env.DATA_DIR, sql_file)) as f:
-            sql = f.read()
-        return self.check_condition_sql(sql, expected, args)
-
-    def check_condition_sql(self, sql: str, expected: int, args: Namespace):
-        session = build_session_from_env(args.environment, echo=cli_env.ALLOW_ECHO_SQL)
-        with session.begin():
-            result = session.execute(text(sql)).one_or_none()
-            logger.info(
-                f"Check condition, SQL={helper.truncate_str(sql, max_len=200)},"
-                f" result={result}"
-            )
-            return result[0] == expected
-
-    def move_schema_to(self, sha1: str, args: Namespace):
-        index_file = helper.sha1_to_path(sha1)
-        with open(index_file, "r") as f:
-            lines = f.readlines()
-        with tempfile.TemporaryDirectory() as temp_dir:
-            os.makedirs(os.path.join(temp_dir, cli_env.SCHEMA_DIR), exist_ok=False)
-            shutil.copy(
-                os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, ".skeema"),
-                os.path.join(temp_dir, cli_env.SCHEMA_DIR, ".skeema"),
-            )
-            for line in lines:
-                [sha1, sql_filename] = line.split(":")
-                sql_filepath = helper.sha1_to_path(sha1)
-                shutil.copy(
-                    sql_filepath,
-                    os.path.join(temp_dir, cli_env.SCHEMA_DIR, sql_filename.strip()),
-                )
-            skeema_args = [
-                "push",
-                args.environment,
-            ]
-            if cli_env.ALLOW_UNSAFE:
-                skeema_args.extend(["--allow-unsafe"])
-            call_skeema(raw_args=skeema_args, cwd=temp_dir)
-        pass
 
 
 class CLI:
@@ -397,7 +28,7 @@ class CLI:
         self.migrator = migrator
 
     def build_dao(self) -> hist_dao.MigrationHistoryDAO:
-        session = build_session_from_env(
+        session = helper.build_session_from_env(
             self.args.environment, echo=cli_env.ALLOW_ECHO_SQL
         )
         self.dao = hist_dao.MigrationHistoryDAO(session)
@@ -863,7 +494,7 @@ class CLI:
         shutil.rmtree(cli_env.MIGRATION_CWD, ignore_errors=True)
 
     def add_environment(self):
-        call_skeema(
+        helper.call_skeema(
             [
                 "add-environment",
                 self.args.environment,
@@ -888,7 +519,7 @@ class CLI:
 
     def _init_schema_dir(self):
         # init schema dir
-        call_skeema(
+        helper.call_skeema(
             [
                 "init",
                 "--host",
@@ -928,7 +559,7 @@ class CLI:
                 f.write("")
 
     def _init_file_existence_check(self):
-        check_file_existence(
+        helper.check_file_existence(
             [
                 os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR),
                 os.path.join(cli_env.MIGRATION_CWD, cli_env.MIGRATION_PLAN_DIR),
@@ -1149,7 +780,7 @@ class CLI:
 
     def skeema(self, raw_args: List[str], cwd: str = cli_env.MIGRATION_CWD):
         # https://stackoverflow.com/questions/39872088/executing-interactive-shell-script-in-python
-        return call_skeema(raw_args, cwd)
+        return helper.call_skeema(raw_args, cwd)
 
     def _print_info_as_table(
         self, prompt: str, output: List[List[str]], headers: List[str]
@@ -1220,11 +851,11 @@ class CLI:
             return
         if argtype == mp.DiffItemType.VERSION:
             schema_dir_path = os.path.join(cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR)
-            schema_dir_files = files_under_dir(schema_dir_path, ".sql")
+            schema_dir_files = helper.files_under_dir(schema_dir_path, ".sql")
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 self.dump_schema(env_or_version, argtype, temp_dir, mkdir=False)
-                ver_files = files_under_dir(temp_dir, ".sql")
+                ver_files = helper.files_under_dir(temp_dir, ".sql")
 
                 # move file under temp_dir to schema dir
                 for filename, filepath in ver_files.items():
@@ -1321,7 +952,7 @@ class CLI:
             self.copy_schema_by_index(index_sha1, dump_dir_path)
             return
         if diff_type == mp.DiffItemType.ENVIRONMENT:
-            env_ini = parse_env_ini()  # env.ini is just a symlink to .skeema
+            env_ini = helper.parse_env_ini()  # env.ini is just a symlink to .skeema
             env = diff_arg
             if not env_ini.has_section(env):
                 raise Exception(f"Environment not found, name={env}")
@@ -1329,7 +960,7 @@ class CLI:
                 cli_env.MIGRATION_CWD, cli_env.SCHEMA_DIR, ".skeema"
             )
             shutil.copy(skeema_file_path, dump_dir_path)
-            call_skeema(["pull", env], cwd=dump_dir_path)
+            helper.call_skeema(["pull", env], cwd=dump_dir_path)
             os.remove(os.path.join(dump_dir_path, ".skeema"))
             return
 

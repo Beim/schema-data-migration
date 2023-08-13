@@ -219,10 +219,9 @@ sdm info dev
 ### Rollback
 
 Run the following command to rollback to version 0000:
-- The environment variable `ALLOW_UNSAFE` is required because the rollback operation will drop table `test_table`.
 
 ```bash
-ALLOW_UNSAFE=1 sdm rollback --version 0000 dev
+sdm rollback --version 0000 dev
 ```
 
 `Migration` will execute the following SQL statements:

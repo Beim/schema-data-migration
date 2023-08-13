@@ -3,27 +3,17 @@
 [![build status](https://img.shields.io/github/actions/workflow/status/beim/schema-data-migration/unittest.yml?branch=main)](https://github.com/Beim/schema-data-migration/actions)
 [![Coverage Status](https://coveralls.io/repos/github/Beim/schema-data-migration/badge.svg?main)](https://coveralls.io/github/Beim/schema-data-migration?branch=main)
 
-`sdm` is a powerful tool for managing database migrations in MySQL and MariaDB. With `sdm`, you can easily manage both schema and data migration, making it an essential tool for any developer working with databases. 
+`sdm` is a open-source tool for managing database migrations in MySQL and MariaDB. With `sdm`, you can easily manage both schema and data migration.
 
 Schema migration is powered by [skeema](https://www.skeema.io/), which uses a [declarative approach](https://www.skeema.io/blog/2019/01/18/declarative/) to schema management: the repository reflects a desired end-state of table definitions, and the tool figures out how to convert any database into this state.
 
 Data migration is supported by [SQLAlchemy](https://docs.sqlalchemy.org/en/20/), [TypeORM](https://typeorm.io/) and can handle SQL, Python, Typescript, and Shell scripts.
 
-## Prerequisite
-
-Before you can use `sdm`, you need to have the following software installed on your system:
-
-- [skeema](https://www.skeema.io/cli/download/)
-- Python (v3.11 or higher)
-- pip (v23.1.2 or higher)
-- Node.js (v18.17.0 or higher, conditional if you use typescript)
-- npm (v9.6.7 or higher, conditional if you use typescript)
-
-You also need to have a MySQL or MariaDB database set up and running on your system. If you don't have one set up yet, you can follow the instructions provided by your operating system or hosting provider to install and configure a database server.
+## Quickstart
 
 ### Docker
 
-You can also use docker image:
+You can run `sdm` through docker:
 
 ```bash
 docker run -u $(id -u):$(id -g) \
@@ -33,13 +23,30 @@ docker run -u $(id -u):$(id -g) \
     sdm -h
 ```
 
-## Installation
+### Build from source
+
+You can install `sdm` from source, you need to have the following software installed on your system:
+
+- [skeema](https://www.skeema.io/cli/download/)
+- Python (v3.11 or higher)
+- pip (v23.1.2 or higher)
+- Node.js (v18.17.0 or higher, optional)
+- npm (v9.6.7 or higher, optional)
+
+
+Then you can clone this repository and install `sdm`:
+
+```bash
+git clone https://github.com/Beim/schema-data-migration.git
+cd schema-data-migration
+pip install .
+```
 
 > If you see errors related to `mysqlclient`, please check https://pypi.org/project/mysqlclient/
 
-```bash
-pip install .
-```
+## Step by step guide
+
+[Step by step guide](./docs/step_by_step_guide.md)
 
 ## Usage
 
@@ -92,19 +99,29 @@ sdm test gen [--output OUTPUT] {simple_forward,step_forward,step_backward,monkey
 sdm test run [--input INPUT] [--clear] {simple_forward,step_forward,step_backward,monkey,custom} environment
 ```
 
-## Step by step guide
-
-[step by step guide](./docs/step_by_step_guide.md)
-
 ## Migration plan types
 
-There're three of migration plans: `schema`, `data` and `repeatable`. 
-- `schema` and `data` migrations are versioned migrations. The applied in order based on their dependencies.
-- `repeatable` migrations have no version. They're (re-)applied every time the checksum changes. 
-    - Within a single migration run, repeatable migrations are always applied last, after all pending versioned migrations have been executed. 
-    - The order in which repeatable migrations are applied is not guaranteed. 
-    - It is your responsibility to ensure the same repeatable migration can be applied multiple times. 
-    - Repeatable migrations will be rolled back if it's dependency has been rolled back.
+All changes to the database are called **migrations** and are defined as JSON format files. The files are referred to here as "migration plan".
+
+There're three of migration: `Schema`, `Data` and `Repeatable`. 
+- `Schema` migrations are suitable for schema changes like: Creating/altering tables/indexes/foreign keys...
+- `Data` migrations are suitable for data changes like: Inserting/updating tables...
+- `Repeatable` migration are suitable for idempotent changes like: Inserting seed data, Creating triggers/views...
+
+
+`Schema` and `Data` migrations have a version, a name and a dependency (except for the initial migration). 
+- The version and name are used to uniquely identify a migration. 
+- The dependency is a composition of the version and name of a schema or data migration. The dependency is used to define the execution order of the migrations.
+
+
+`Repeatable` migrations have a name, a dependency, a ignore_after field and a fixed version (R). 
+- The name is used to uniquely identify a migration. 
+- The dependency, ignore_after is a composition of the version and name of a schema or data migration. A repeatable migration will only be executed if it's dependency has been applied, and it will not be executed if it's ignore_after has been applied.
+- Repeatable migrations are (re-)applied every time the checksum changes. The checksum is calculated based on the content of the migration plan and it's linked files.
+- Within a single migration run, repeatable migrations are always applied last, after all pending schema and data migrations have been executed. 
+- The order in which repeatable migrations are applied is not guaranteed. 
+- It is your responsibility to ensure the same repeatable migration can be applied multiple times. 
+- Repeatable migrations will be rolled back if they're rollbackable and their dependency has been rolled back.
 
 ## Precheck hook
 
@@ -245,10 +262,14 @@ The first command will show you which files would be deleted without actually de
 
 ## Online schema change
 
-- https://www.skeema.io/docs/options/#alter-wrapper
-- https://docs.percona.com/percona-toolkit/pt-online-schema-change.html
+To enable online schema change, add the following configuration to your `env.ini` file:
+
+```ini
+alter-wrapper=/usr/local/bin/pt-online-schema-change --execute --alter {CLAUSES} D={SCHEMA},t={TABLE},h={HOST},P={PORT},u={USER},p={PASSWORDX}
+```
+
+You can find more options in the [Skeema documentation](https://www.skeema.io/docs/faq/#how-do-i-configure-skeema-to-use-online-schema-change-tools)
 
 ## Future plans
 
-- [x] Support conditional execution of schema and data migration
 - [ ] Support database/table sharding
