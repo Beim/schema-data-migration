@@ -94,3 +94,4 @@ Version 0.5.7
 =============
 
 - Add `rollbackable` column in `info` command output
+- Enable ALLOW_UNSAFE by default when rollback schema migration
