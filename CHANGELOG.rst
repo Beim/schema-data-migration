@@ -100,3 +100,8 @@ Version 0.5.8
 =============
 
 - Use `.skeema` to replace `env.ini` for configuration
+
+Version 0.5.9
+=============
+
+- Fix `test` command fail due to foreign key check

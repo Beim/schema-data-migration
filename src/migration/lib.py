@@ -475,6 +475,7 @@ class CLI:
         dao = self.build_dao()
         schema = dao.session.bind.url.database
         with dao.session.begin():
+            dao.session.execute(text("SET FOREIGN_KEY_CHECKS=0;"))
             rows = dao.session.execute(
                 text(
                     "select table_name from information_schema.tables where"
@@ -482,7 +483,8 @@ class CLI:
                 )
             ).all()
             for [table_name] in rows:
-                dao.session.execute(text(f"drop table {table_name};"))
+                dao.session.execute(text(f"drop table `{table_name}`;"))
+            dao.session.execute(text("SET FOREIGN_KEY_CHECKS=1;"))
             dao.commit()
         logger.warning("Database cleared")
 
