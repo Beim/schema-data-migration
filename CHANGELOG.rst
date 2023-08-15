@@ -105,3 +105,8 @@ Version 0.5.9
 =============
 
 - Fix `test` command fail due to foreign key check
+
+Version 0.5.10
+=============
+
+- Fix `skeema` command current working directory

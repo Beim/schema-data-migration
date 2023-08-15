@@ -775,7 +775,7 @@ class CLI:
     def sha1_encode(self, str_list: List[str]):
         return helper.sha1_encode(str_list=str_list)
 
-    def skeema(self, raw_args: List[str], cwd: str = cli_env.MIGRATION_CWD):
+    def skeema(self, raw_args: List[str], cwd: str = cli_env.SDM_SCHEMA_DIR):
         # https://stackoverflow.com/questions/39872088/executing-interactive-shell-script-in-python
         return helper.call_skeema(raw_args, cwd)
 
