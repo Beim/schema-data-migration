@@ -10,6 +10,9 @@ RUN set -ex && \
     pip install . && ln -s /data/schema-data-migration/venv/bin/sdm /usr/local/bin/sdm && \
     which sdm
 
+ENV VIRTUAL_ENV /data/schema-data-migration/venv
+ENV PATH /data/schema-data-migration/venv/bin:$PATH
+
 WORKDIR /workspace
 
 CMD ["/bin/bash"]

@@ -12,6 +12,9 @@ RUN set -ex && \
     rm -rf /var/lib/apt/lists/* && \
     which sdm
 
+ENV VIRTUAL_ENV /data/schema-data-migration/venv
+ENV PATH /data/schema-data-migration/venv/bin:$PATH
+
 WORKDIR /workspace
 
 CMD ["/bin/bash"]
