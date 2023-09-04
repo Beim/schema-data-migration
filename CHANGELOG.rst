@@ -110,3 +110,8 @@ Version 0.5.10
 =============
 
 - Fix `skeema` command current working directory
+
+Version 0.5.11
+=============
+
+- Enable python virtual env in docker file
