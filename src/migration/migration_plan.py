@@ -97,6 +97,7 @@ class DataForward:
     file: Optional[str | None] = None
     precheck: Optional[ConditionCheck | None] = None
     postcheck: Optional[ConditionCheck | None] = None
+    envs: Optional[List[str] | None] = None
 
     def to_dict(self) -> Dict:
         obj = {
@@ -116,6 +117,8 @@ class DataForward:
             obj["precheck"] = self.precheck.to_dict()
         if self.postcheck is not None:
             obj["postcheck"] = self.postcheck.to_dict()
+        if self.envs is not None and len(self.envs) > 0:
+            obj["envs"] = self.envs
         return obj
 
     def to_str_for_print(self) -> str:
@@ -281,6 +284,9 @@ class MigrationPlan:
                         | DataChangeType.TYPESCRIPT
                     ):
                         sha1.update_file([os.path.join(data_dir, forward.file)])
+                if forward.envs is not None:
+                    for key in forward.envs:
+                        sha1.update_str([f"{key}={os.getenv(key, default='')}"])
                 if backward is not None:
                     match backward.type:
                         case (
@@ -290,6 +296,9 @@ class MigrationPlan:
                             | DataChangeType.TYPESCRIPT
                         ):
                             sha1.update_file([os.path.join(data_dir, backward.file)])
+                    if backward.envs is not None:
+                        for key in backward.envs:
+                            sha1.update_str([f"{key}={os.getenv(key, default='')}"])
         self._checksum = sha1.hexdigest()
         return self._checksum
 

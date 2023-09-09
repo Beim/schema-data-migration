@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 import pytest
@@ -107,3 +108,35 @@ def test_multi_dependency():
 
     with pytest.raises(err.IntegrityError):
         mp.MigrationPlanManager._sort_plans(plans)
+
+
+def test_checksum():
+    os.environ["MY_ENV"] = "foo"
+
+    def makemp():
+        return mp.MigrationPlan(
+            version="0001",
+            name="hello",
+            dependencies=[],
+            author="foo",
+            type=mp.Type.REPEATABLE,
+            change=mp.Change(
+                forward=mp.DataForward(
+                    type=mp.DataChangeType.SQL,
+                    sql="SELECT * FROM testtable",
+                    envs=["MY_ENV"],
+                ),
+                backward=None,
+            ),
+        )
+
+    checksum1 = makemp().get_checksum()
+
+    os.environ["MY_ENV"] = "bar"
+    checksum2 = makemp().get_checksum()
+
+    assert checksum1 != checksum2
+
+    os.environ["MY_ENV"] = "foo"
+    checksum3 = makemp().get_checksum()
+    assert checksum1 == checksum3

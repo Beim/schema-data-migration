@@ -115,3 +115,8 @@ Version 0.5.11
 =============
 
 - Enable python virtual env in docker file
+
+Version 0.6.0
+=============
+
+- Add new configuration `envs` field to migration plan for calculating checksum

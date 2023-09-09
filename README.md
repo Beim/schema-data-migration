@@ -117,7 +117,7 @@ There're three types of migrations: `Schema`, `Data` and `Repeatable`.
 `Repeatable` migrations have a name, a dependency, a ignore_after field and a fixed version (R). 
 - The name is used to uniquely identify a migration. 
 - The dependency, ignore_after is a composition of the version and name of a schema or data migration. A repeatable migration will only be executed if it's dependency has been applied, and it will not be executed if it's ignore_after has been applied.
-- Repeatable migrations are (re-)applied every time the checksum changes. The checksum is calculated based on the content of the migration plan and it's linked files.
+- Repeatable migrations are (re-)applied every time the checksum changes. The checksum is calculated based on the content of the migration plan, it's linked environment variables and it's linked files.
 - Within a single migration run, repeatable migrations are always applied last, after all pending schema and data migrations have been executed. 
 - The order in which repeatable migrations are applied is not guaranteed. 
 - It is your responsibility to ensure the same repeatable migration can be applied multiple times. 
