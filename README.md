@@ -266,6 +266,7 @@ To enable online schema change, add the following configuration to your `schema/
 
 ```ini
 alter-wrapper=/usr/local/bin/pt-online-schema-change --execute --alter {CLAUSES} D={SCHEMA},t={TABLE},h={HOST},P={PORT},u={USER},p={PASSWORDX}
+alter-wrapper-min-size=1g
 ```
 
 You can find more options in the [Skeema documentation](https://www.skeema.io/docs/faq/#how-do-i-configure-skeema-to-use-online-schema-change-tools)
