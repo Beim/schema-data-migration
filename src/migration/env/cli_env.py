@@ -1,11 +1,17 @@
+import logging
 import os
 
 from . import load
 
+logger = logging.getLogger(__name__)
+
 MIGRATION_CWD = os.path.abspath(
     load.getenv("MIGRATION_CWD", default=".", required=False)
 )
-MYSQL_PWD = load.getenv("MYSQL_PWD", required=True)
+MYSQL_PWD = load.getenv("MYSQL_PWD", required=False, default="")
+if MYSQL_PWD == "":
+    logger.warning("MYSQL_PWD is not set in environment variable, use empty string")
+
 UNITTEST_DB_NAME = load.getenv(
     "UNITTEST_DB_NAME", required=False, default="migration_test"
 )

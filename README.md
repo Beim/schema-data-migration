@@ -271,6 +271,18 @@ alter-wrapper-min-size=1g
 
 You can find more options in the [Skeema documentation](https://www.skeema.io/docs/faq/#how-do-i-configure-skeema-to-use-online-schema-change-tools)
 
+## Applying sdm to an existing database
+
+If you already have a production database that is not managed by `sdm`, you can follow these steps to apply `sdm` to it:
+
+1. Initialize your project with `sdm init`, `add-env`, `make-schema`, and so on.
+1. Compare the changes against the existing database with `sdm skeema diff <env>`.
+1. Apply the schema changes with `sdm skeema push <env>`.
+    1. If dropping tables you need to specify: `sdm skeema 'push <env> --allow-unsafe'`
+1. Update the migration history with `sdm migrate <env> --fake`.
+1. (Optional) Apply any repeatable migration plans with `sdm migrate <env>`.
+
+
 ## Future plans
 
 - [ ] Support database/table sharding

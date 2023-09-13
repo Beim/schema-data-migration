@@ -120,3 +120,8 @@ Version 0.6.0
 =============
 
 - Add new configuration `envs` field to migration plan for calculating checksum
+
+Version 0.6.1
+=============
+
+- Make MYSQL_PWD optional, if not set, use empty string as password
