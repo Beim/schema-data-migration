@@ -19,6 +19,7 @@ def make_session(
     engine = create_engine(
         f"mysql+mysqldb://{user}:{encoded_password}@{host}:{port}/{schema}",
         echo=echo,
+        pool_pre_ping=True,
     )
     if create_all_tables:
         model.Base.metadata.create_all(engine)

@@ -125,3 +125,8 @@ Version 0.6.1
 =============
 
 - Make MYSQL_PWD optional, if not set, use empty string as password
+
+Version 0.6.2
+=============
+
+- enable pool_pre_ping for sqlalchemy
