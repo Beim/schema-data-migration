@@ -1,4 +1,4 @@
-FROM beim/schema-data-migration:base-0.1.0
+FROM beim/schema-data-migration:base-0.2.0
 
 RUN mkdir -p /data/schema-data-migration
 COPY . /data/schema-data-migration/

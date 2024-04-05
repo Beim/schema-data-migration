@@ -5,7 +5,7 @@ on: [push]
 jobs:
   unittest:
     runs-on: ubuntu-latest
-    container: beim/schema-data-migration:base-0.1.0
+    container: beim/schema-data-migration:base-0.2.0
     strategy:
       matrix:
         dbimage: ['mysql:5.7', 'mysql:8.0', 'mysql:latest', 'mariadb:10', 'mariadb:latest']
