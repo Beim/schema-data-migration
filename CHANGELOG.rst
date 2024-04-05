@@ -130,3 +130,8 @@ Version 0.6.2
 =============
 
 - enable pool_pre_ping for sqlalchemy
+
+Version 0.6.3
+=============
+
+- upgrade `skeema` to `1.11.2`
