@@ -1,4 +1,4 @@
-FROM beim/schema-data-migration:base-0.2.0
+FROM beim/schema-data-migration:base-0.3.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends python3-dev default-libmysqlclient-dev build-essential pkg-config
 

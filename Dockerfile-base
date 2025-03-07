@@ -14,9 +14,9 @@ RUN set -ex && \
     wget percona.com/get/pt-online-schema-change && chmod +x pt-online-schema-change && mv pt-online-schema-change /usr/local/bin/ && \
     apt-get -y auto-remove && rm -rf /var/lib/apt/lists/*
 
-# install node.js from https://github.com/nodejs/docker-node/blob/57d57436d1cb175e5f7c8d501df5893556c886c2/18/bookworm/Dockerfile
-ENV NODE_VERSION 18.17.0
-ENV ARCH x64
+# install node.js from https://github.com/nodejs/docker-node/blob/main/20/bookworm-slim/Dockerfile
+ENV NODE_VERSION=20.18.3
+ENV ARCH=x64
 RUN set -ex \
   && curl -fsSLO --compressed "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-$ARCH.tar.xz" \
   && tar -xJf "node-v$NODE_VERSION-linux-$ARCH.tar.xz" -C /usr/local --strip-components=1 --no-same-owner \
@@ -27,8 +27,9 @@ RUN set -ex \
   && node --version && npm --version
 
 # install skeema
+ENV SKEEMA_VERSION=1.12.3
 RUN mkdir skeema && cd skeema && \
-    curl -L https://github.com/skeema/skeema/releases/download/v1.11.2/skeema_1.11.2_linux_amd64.tar.gz | tar xz && \
+    curl -L https://github.com/skeema/skeema/releases/download/v${SKEEMA_VERSION}/skeema_${SKEEMA_VERSION}_linux_amd64.tar.gz | tar xz && \
     mv skeema /usr/local/bin/skeema && \
     cd .. && rm -rf skeema && skeema --version
 
