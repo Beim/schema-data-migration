@@ -33,7 +33,7 @@ collect:
 	python -m pytest --collect-only ./tests
 
 build-base-image:
-	sudo docker build -f Dockerfile-base -t beim/schema-data-migration:base-0.2.0 .
+	sudo docker build --progress=plain -f Dockerfile-base -t beim/schema-data-migration:base-0.3.0 .
 
 build-image:
 	sudo docker build -f Dockerfile-dev -t beim/schema-data-migration:dev .

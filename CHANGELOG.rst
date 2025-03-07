@@ -135,3 +135,9 @@ Version 0.6.3
 =============
 
 - upgrade `skeema` to `1.11.2`
+
+Version 0.6.4
+=============
+
+- upgrade `skeema` to `1.12.3`
+- upgrade `node` to `20.18.3`
